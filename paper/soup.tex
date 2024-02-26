@@ -1,0 +1,1115 @@
+\documentclass[nolinenum]{jfp}
+\usepackage[T1]{fontenc}
+\usepackage[scaled=0.9]{beramono}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{relsize}
+\usepackage{multicol}
+
+\begin{document}
+
+\lstset{
+  columns=[c]fixed ,
+  basicstyle=\relscale{0.85}\ttfamily\linespread{1.1}\selectfont,
+  keywordstyle=\bfseries,
+  mathescape=true,
+  upquote=true,
+  commentstyle=\slshape,
+  breaklines=true,
+  showstringspaces=false}
+
+\lstdefinelanguage{ocaml}{language=[objective]caml,
+   % Fixes double quotes in char literals
+   literate={'"'}{\textquotesingle "\textquotesingle}3
+   {'\\"'}{\textquotesingle \textbackslash"\textquotesingle}4
+   {;}{\textbf{;}}1
+   {|}{\textbf{|}}1
+   {type'}{type'}5 % gets rid of bold
+}
+
+%%\journaltitle{JFP}
+%%\cpr{Cambridge University Press}
+%%\doival{10.1017/xxxxx}
+%\righttitle{Journal of Functional Programming}
+\righttitle{}
+\journaltitle{\textbf{WARNING, REJECTED by the JFP}
+  but may still be useful}
+\cpr{Daniel C. Bünzli}
+\doival{xx.xxxx/xxxxx Document style kept for now, because layout
+  was tailored for it. revision 1}
+
+\newcommand{\thetitle}{An alphabet for your data soups}
+
+\title{\thetitle}
+\lefttitle{\thetitle}
+
+\totalpg{\pageref{lastpage01}}
+\jnlDoiYr{2024}
+
+\newcommand{\json}{\textsc{json}}
+\newcommand{\ocaml}{\textsc{ocaml}}
+\newcommand{\ml}{\textsc{ml}}
+\newcommand{\code}[1]{{\lstinline[language=ocaml]{#1}}}
+
+\begin{authgrp}
+  \renewcommand*{\thefootnote}{\fnsymbol{footnote}}
+  \author{Daniel C. Bünzli}%
+  \footnote{Funded by the Swiss National Science
+  Foundation (grant \oldstylenums{\textsc{pp00p1\_211010}},\emph{
+  The Epistemology of Climate Change –– Understanding the Climate Challenge})
+  and a grant from the
+  \href{https://ocaml-sf.org/}{OCaml Software Foundation}.
+  }%
+  \affiliation{Institute of Philosophy, University of Bern, Switzerland\\
+    (\email{daniel.buenzli@erratique.ch})}
+
+\end{authgrp}
+
+\begin{abstract}
+  Dealing with ubiquitous but poorly typed and structured data models
+  like \json{} in \ml{} languages is unpleasant. But it doesn't have
+  to be. We show how to define a generalized algebraic datatype whose
+  values denote bidirectional maps between subsets of values of a data
+  model and the \ml{} values of your choice. With suitable combinators
+  these maps are quick and pleasant to define in a declarative
+  style. The result can be used by generic functions that decode,
+  encode, query and update data soups with nicely typed values.
+\end{abstract}
+
+\maketitle[F]
+\section{Introduction}
+
+Processing generic data models like \json{} in \ml{} languages is
+unpleasant. \ml{} values can be converted to these data models with
+pickler combinators \citep{picklers} or datatype-generic programming
+techniques \citep{datatypegeneric}. However, partially or fully
+modelling \emph{their} data schemas remains cumbersome. Using a
+generic type for the data model works well in dynamically typed
+languages because it directly maps on their own type systems. But in
+\ml{} this representation is unnatural and frustrating to use.
+
+Instead, we show how to define a generalized algebraic datatype whose
+values denote bidirectional maps between subsets of values of the data
+model and the \ml{} values you want to use. With appropriate
+combinators to construct them, these descriptions can be made quick to
+define in the \emph{decoding} and \emph{encoding} direction possibly
+eliding one if not immediately useful. The values of this datatype can
+be used by generic functions that:
+
+\begin{itemize}
+\item Directly decode or encode the data model to the \ml{} values of
+  your choice without constructing values of a generic
+  representation of the data model.\footnote{For
+  \json{}, since the shape of an object may depend on one of its
+  members and that members are unordered, some form of generic
+  buffering may be needed to decode certain data schemas.}
+\item Query and update data of partially modelled data schemas with
+  arbitrary \ml{} values.
+\item Automatically construct them from other datatype-generic
+  representations you may already have defined for your \ml{} types.
+\end{itemize}
+
+Like pickler combinators \citep{picklers}, the definition of these
+values can be made pleasantly declarative. The decoding and encoding
+bureaucracy is left to the generic functions that interpret the
+datatype. One way of understanding the datatype is to devise pickler
+combinators for the data model~––~rather than for the values of the
+\ml{} language~--~ but leave out the specific value coding machinery
+open for interpretation. Another way is to see it as a tagged final
+coding of the data model. Concretely the datatype allows to interpose
+your own functions at each data model value decoding and encoding
+step. These functions can be lossy or creative which naturally leads
+to data queries and data updates.
+
+In what follows we focus on presenting the datatype. Providing an
+ergonomic set of combinators to construct its values is important but
+less difficult. Definitions
+are kept as simple as possible to expose the essence of this
+\emph{finally tagged} representation. A practical
+implementation\footnote{One can be found at
+\url{https://erratique.ch/software/jsont}} should enrich these
+definitions with documentation strings for data schema documentation
+generation, text locations for human friendly error reporting and
+text layout information for layout preserving updates.
+
+We use \ocaml{} \citep{ocaml} for the \ml{} language and \json{}
+\citep{json} for the data model, but as we conclude in
+\autoref{sec:recipe} with the recipe, this technique is independent of
+them. For conciseness we use exceptions to represent partial functions
+but signatures can be changed to use explicit \code{result} or
+\code{either} return types where needed. No effects are needed from
+the \ml{} language.
+
+\section{A generic representation}
+\label{sec:genrep}
+
+First we define the type \code{Json.t}, a generic representation for
+\json{} values in \ml{}. In essence nothing more than an abstract
+syntax tree for \json{} text with one case for each sort of value.
+
+\begin{lstlisting}[language=ocaml]
+module Json = struct
+  type t =
+  | Null of unit | Bool of bool | Number of float | String of string
+  | Array of t list | Obj of obj and obj = mem list and mem = string * t
+end
+\end{lstlisting}
+
+As can be seen later, the type \code{Json.t} remains useful. However it is
+the type that is unacceptable to work with in \ml{}. Given a fixed
+data schema to process we do not want to manipulate this soup of
+values:
+
+\begin{itemize}
+\item We want objects to be represented by proper record or variant types.
+  Not by \code{Json.obj} association lists that must be dynamically name
+  checked for expectations.
+\item We want to get typed values on array element and object
+  member access. Not generic \code{Json.t} values that must be dynamically
+  type checked for expectations.
+\end{itemize}
+
+\section{A typed representation to interpret}
+\label{sec:jsont}
+
+To replace these generic values by the \ml{} values we want, we
+introduce the type \code{'a jsont} whose values denote subsets of
+\json{} values and their bidirectional map to \ml{} values of type
+\code{'a}.
+
+We call these values ``\json{} types''. They belong to the following
+generalized algebraic datatype whose cases and elided definitions are
+detailed in subsequent sections. The \code{Rec} case is bureaucracy
+the laziest readers do not need to care about, it types recursives
+\json{} values if your \ml{} is strict.
+
+\begin{lstlisting}[language=ocaml]
+type ('a, 'b) base_map = $\ldots$
+type ('a, 'elt, 'builder) array_map = $\ldots$
+and ('o, 'dec) obj_map = $\ldots$
+and 'a any_map = $\ldots$
+and ('a, 'b) map = $\ldots$
+and _ jsont =
+| Null : (unit, 'b) base_map -> 'b jsont
+| Bool : (bool, 'b) base_map -> 'b jsont
+| Number : (float, 'b) base_map -> 'b jsont
+| String : (string, 'b) base_map -> 'b jsont
+| Array : ('a, 'elt, 'builder) array_map -> 'a jsont
+| Obj : ('o, 'o) obj_map -> 'o jsont
+| Any : 'a any_map -> 'a jsont
+| Map : ('a, 'b) map -> 'b jsont
+| Rec : 'a jsont Lazy.t -> 'a jsont
+\end{lstlisting}
+%
+Except for \code{Any}, \code{Map} and \code{Rec}, the cases of the type
+\code{'a jsont} are in direct correspondence with those of
+\code{Json.t}. But rather than storing data in the cases we have
+functions to bidirectionally map them to values of a type
+\code{'a}. The \code{'a jsont} values are used alongside decoding and
+encoding processes to directly check and transform the shape of the
+data.
+
+For instance we can implement (see \hyperref[sec:appendix]{Appendix}
+and \autoref{sec:convert}) these two functions which decode and encode
+generic \code{Json.t} values with \ml{} values:
+\begin{lstlisting}[language=ocaml]
+val decode : 'a jsont -> Json.t -> 'a
+val encode : 'a jsont -> 'a -> Json.t
+\end{lstlisting}
+
+Representing \json{} data with \ml{} values becomes a matter of
+defining suitable \code{'a jsont} values. For example this
+kind of \json{} object for messages:
+%
+\begin{lstlisting}[language=c]
+{ "content": "J'aime pas la soupe", "public": true }
+\end{lstlisting}
+%
+can be represented in \ml{} by a record with two fields. Using the
+record's natural constructor and field accessors, combinators whose
+implementation is given in \autoref{sec:mem_map}, and \ocaml's reverse
+function application operator \code{|>}, this kind of object is described by:
+
+\begin{lstlisting}[language=ocaml]
+module Message = struct
+  type t = { content : string; public : bool }
+  let make content public = { content; public }
+  let content msg = msg.content
+  let public msg = msg.public
+  let jsont : t jsont =
+    obj_map make
+    |> obj_mem "content" string ~enc:content
+    |> obj_mem "public" bool ~enc:public
+    |> obj_finish
+end
+\end{lstlisting}
+
+\subsection{Base cases}
+\label{sec:base_cases}
+
+Every base case carries a value of type \code{base_map}:
+%
+\begin{lstlisting}[language=ocaml]
+type ('a, 'b) base_map =
+{ dec : 'a -> 'b;
+  enc : 'b -> 'a; }
+\end{lstlisting}
+%
+Values of this type describe bidirectional maps from values of type
+\code{'a} to \code{'b}. They are used to transform the canonical \ml{}
+type \code{'a} chosen for a \json{} base type to the one we want to
+use. The base cases are as follows:
+
+\begin{itemize}
+\item
+\code{Null m} maps \json{} nulls to type \code{'a} by mapping
+\code{unit} values with \code{m}.
+%
+\item
+\code{Bool m} maps \json{} booleans to type \code{'a} by mapping
+\code{bool} values with \code{m}.
+%
+\item
+\code{Number m} maps \json{} numbers or
+nulls%%
+\footnote{The semantics of \json{} numbers is left to be desired.
+Interoperable \json{} implementations map \json{} numbers to
+\textsc{ieee} 754 \code{binary64} values. But they are \emph{not} such
+values: \textsc{nan} and infinities cannot be represented. As of
+writing, the most widely deployed and formally defined \json{}
+encoder, namely \textsc{ecmascript}'s \mbox{\code{JSON.stringify}}
+\citep{ecmascript}, lossily encodes any non-finite floating point value by
+\code{null}.}
+%%
+to type \code{'a} by mapping \code{float} values with \code{m}.
+%
+\item
+\code{String m} maps unescaped \json{} strings to type \code{'a} by
+mapping \code{string} values with \code{m}.
+\end{itemize}
+
+Most of the time the map \code{m} used with base cases is the identity
+map. But having maps on base types is part of the strategy to
+interpose functions in every coding context. This is particulary
+useful for \json{} strings which are \json{}'s universal type: all
+sorts of enumerations, better represented by variants in \ml{}, can be
+found in them. More amusing, to reliably interchange \mbox{64-bit}
+integers with \json{} you need to encode them in strings.%%
+\footnote{Again, interoperable \json{} implementations map
+\json{} numbers to \textsc{ieee} 754 \code{binary64} values. Hence the
+only integers that can be interchanged safely without precision loss
+are those in the range $[-2^{53};2^{53}]$.}
+
+\subsection{Map case}
+\label{sec:map_case}
+
+The elided type \code{map} used by \code{Map} is:
+\begin{lstlisting}[language=ocaml]
+and ('a, 'b) map =
+{ dom : 'a jsont;
+  map : ('a, 'b) base_map; }
+\end{lstlisting}
+%
+A \code {Map m} value changes the \ml{}  type of the \json{} type
+\code{m.dom} from \code{'a} to \code{'b}. It is a tool for composing
+\code{jsont} values. If the reader wonders whether it is not simpler
+to expose a base case like \code{String m} by the value \code{\{dom =
+  String;} \code{ map = m\}}, the answer is rather negative. It is not
+directly evident in our simpler exposition but having maps in base
+cases provides the proper coding context for erroring or text
+layout preserving. This context may be more difficult to recover or no
+longer be available to generic functions when they get to process the
+\code{Map} case which is not syntactically related to \json{} text.
+
+\pagebreak
+
+\subsection{Array case}
+\label{sec:array_case}
+
+The elided type \code{array_map} used by \code{Array} is:
+%
+\begin{lstlisting}[language=ocaml]
+and ('array, 'elt, 'builder) array_map =
+{ elt : 'elt jsont;
+  dec_empty : 'builder;
+  dec_skip : 'builder -> int -> bool;
+  dec_add : 'builder -> int -> 'elt -> 'builder;
+  dec_finish : 'builder -> 'array;
+  enc : 'acc. ('acc -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc; }
+\end{lstlisting}
+%
+An \code{Array m} value maps \json{} arrays of uniform \json{} type
+\code{m.elt} to values of type \code{'array} built using values of
+type \code{'builder}. The record \code{m} explains how to construct
+and deconstruct an \code{'array} value. For decoding, we start with
+the value \code{m.dec_empty}, the element in the \json{} array at
+index \code{i} is added with \code{m.dec_add}, unless
+\code{m.dec_skip} is \code{true} on \code{i} (the purpose of
+\code{dec_skip} will become clear later), and the final array is
+returned by \code{m.dec_finish}. For encoding, the \code{m.enc}
+function folds over the elements of an \code{'array} value to encode
+them to the \json{} array.
+
+\subsection{Any case}
+\label{sec:any_case}
+
+The elided type \code{any_map} used by \code{Any} is:
+%
+\begin{lstlisting}[language=ocaml]
+and 'a any_map =
+{ dec_null : 'a jsont option;
+  dec_bool : 'a jsont option;
+  dec_number : 'a jsont option;
+  dec_string : 'a jsont option;
+  dec_array : 'a jsont option;
+  dec_obj : 'a jsont option;
+  enc : 'a -> 'a jsont; }
+\end{lstlisting}
+%
+An \code{Any m} value maps sets of \json{} values with multiple sorts
+to values of type \code{'a}. It embeds dynamic typing in our
+datatype. It also allows to decode and encode with different sorts
+of \json{} values. For decoding a \json{} value of sort \code{t},
+a generic function uses the \json{} type \code{m.dec_t} or errors if
+\code{None}. For encoding, the \code{m.enc} function returns the
+\json{} type to use with the value.
+
+Given a \json{} type value \code{t} the following \code{option}
+combinator uses \code{Any} to make it nullable in \json{}. The result
+of \code{option t} is a \json{} type that maps \json{} null values to
+\code{None} and otherwise maps \json{} values as \code{t} does but
+with successful results wrapped by \code{Some}.
+%
+\begin{lstlisting}[language=ocaml]
+let option : 'a jsont -> 'a option jsont = fun t ->
+  let none = Null { dec = Fun.const None; enc = Fun.const () } in
+  let some = Map { dom = t; map = {dec = Option.some; enc = Option.get}}in
+  let enc = function None -> none | Some _ -> some in
+  let none = Some none and some = Some some in
+  Any { dec_null = none; dec_bool = some; dec_number = some;
+        dec_string = some; dec_array = some; dec_obj = some; enc; }
+\end{lstlisting}
+
+The \code{Any} case also allows to devise the \json{} type \code{json}
+which maps any \json{} value to its generic representation:
+%
+\begin{lstlisting}[language=ocaml]
+let json : Json.t jsont = $\ldots$
+\end{lstlisting}
+%
+Its definition is left as an exercice for the reader but
+this value is a must for partial data schema modelling.
+
+\subsection{Obj case}
+\label{sec:obj_case}
+
+Mapping objects is more involved and the design is less
+self-evident. Challenges are that members in \json{} objects are
+unordered, that the shape of an object may depend on the value of one
+if its members\footnote{This is not a built-in mechanism of the data
+model but out-of-band constraints mandated by data schemas.} and that
+duplicate member names is undefined behaviour.\footnote{But
+\textsc{ecmascript}'s formally defined decoder
+\mbox{\code{JSON.parse}} \citep{ecmascript} mandates ``last one takes
+over.''} This means that we cannot rely on a fixed member ordering to
+construct the \ml{} value of an object and worse, that we may have to
+wait for its last member to type check it.
+
+To narrow the design space, we focus on a few patterns found in
+\json{} data schemas that we want to support without fuss while
+retaining efficient decodes for object shapes that are known beforehand.
+These patterns are:
+%
+\begin{enumerate}
+\item Objects as records. Member names and their types are
+  known beforehand. Members are required or optional in which
+  case they can have a default value.
+\item Objects as uniform key-value maps. Member names of the object
+  are unknown but their values are all of the same type.  This
+  must compose with pattern 1. as with the \json{} type \code{json}
+  (\autoref{sec:any_case})
+  it enables partial object modelling
+  and supports data schemas that allow foreign members in their
+  objects.
+\item Objects as sums. There is a distinguished \emph{case member},
+  for example named \code{"type"}, \code{"class"} or \code{"version"},
+  and its value further determines an object shape described using
+  pattern 1., 2. or 3.
+\end{enumerate}
+%
+Finally we want \json{} object maps to be defined through functions that are
+already naturally provided for our \ml{} types: constructors and
+accessors.
+
+If the shape of an object cannot be captured by these patterns, it is
+always possible to map it to a uniform \code{Json.t} key-value map using
+pattern 2. followed by a \code{Map} to sort things out. This provides
+an ultimate escape hatch at the cost of unconditionnaly going through
+the generic representation.
+
+\subsubsection{(De)constructing arbitrary \ml{} values for \json{} objects}
+
+We want to represent \json{} objects by arbitrary \ml{} values of type
+\code{'o} which hold member values with their own distinct types
+\code{'a}$_1$, \code{'a}$_2$, etc.
+
+For encoding this is easily tackled by having one projection function
+of type \code{'o -> 'a}$_i$ for each object member. For decoding we
+need to provide a constructor function with one argument per member
+value that returns a value of type \code{'o}. To manipulate this
+constructor we use a datatype morally equivalent to this
+representation of a function application:
+\pagebreak
+\begin{lstlisting}[language=ocaml]
+type ('ret, 'f) app =
+| Fun : 'f -> ('ret, 'f) app
+| App : ('ret, 'a -> 'b) app * 'a -> ('ret, 'b) app
+\end{lstlisting}
+%
+In a value of type \code{app} we can lift an arbitrary function
+\code{f} returning \code{'ret} with the \code{Fun} case and instrument
+each argument application with \code{App} cases until \code{f} is
+fully ``applied'' to a value of type \code{('ret, 'ret)} \code{app}.
+We store object constructors in a similar data type but since we do not
+have the argument values yet we use a type witness\footnote{Available
+in the \ocaml{} standard library in \code{Type.Id} since \ocaml{} 5.1}
+to serve as a placeholder for the member value:
+%
+\begin{lstlisting}[language=ocaml]
+type ('ret, 'f) dec_fun =
+| Dec_fun : 'f -> ('ret, 'f) dec_fun
+| Dec_app : ('ret, 'a -> 'b) dec_fun * 'a Type.Id.t -> ('ret, 'b) dec_fun
+\end{lstlisting}
+%
+This allows to decode unordered and individually typed member values
+as they come, store them by type witness in an heterogeneous
+dictionary \code{Dict.t} (see implementation in the
+\hyperref[sec:appendix]{Appendix}) and, once we have collected all
+member values in the dictionary, we can invoke the constructor to get
+the \ml{} value for the object with this function:
+%
+\begin{lstlisting}[language=ocaml]
+let rec apply_dict : type ret f. (ret, f) dec_fun -> Dict.t -> f =
+fun dec dict -> match dec with
+| Dec_fun f -> f
+| Dec_app (f,arg) -> (apply_dict f dict) (Option.get (Dict.find arg dict))
+\end{lstlisting}
+%
+For fully known object shapes this mechanism allows decoders to
+directly decode objects and their unordered member values to the
+representations we want to use in \ml{}.
+
+\subsubsection{Object maps}
+\label{sec:obj_map}
+
+The elided type \code{obj_map} used by \code{Obj} is:
+
+\begin{lstlisting}[language=ocaml]
+and ('o, 'dec) obj_map =
+{ dec : ('o, 'dec) dec_fun;
+  mem_decs :  mem_dec String_map.t;
+  mem_encs : 'o mem_enc list;
+  shape : 'o obj_shape; }
+\end{lstlisting}
+%
+An \code{Obj m} value maps a \json{} object to a value of type
+\code{'o}. The \code{m.dec} field holds the constructor function for
+\code{'o} values. The \code{Obj} case in the definition of
+\code{jsont} (\autoref{sec:jsont}) constrains the \code{'dec}
+parameter to be equal to \code{'o} which ensures that the contructor
+is fully ``applied''. Remaining fields of the record are described in
+subsequent sections.
+
+\subsubsection{Member maps}
+\label{sec:mem_map}
+
+The \code{m.mem_decs} and \code{m.mem_encs} fields of \code{obj_map}
+describe members of the object that are known beforehand. Both fields
+hold the same values of type \code{mem_map} but they are sorted
+differently and their type parameters are hidden in slighly different
+ways to accomodate decoding and encoding processes. These types are
+defined by:
+\pagebreak
+\begin{lstlisting}[language=ocaml]
+and    mem_dec = Mem_dec : ('o, 'a) mem_map ->    mem_dec
+and 'o mem_enc = Mem_enc : ('o, 'a) mem_map -> 'o mem_enc
+and ('o, 'a) mem_map =
+{ name : string;
+  type' : 'a jsont;
+  id : 'a Type.Id.t;
+  dec_absent : 'a option;
+  enc : 'o -> 'a;
+  enc_omit : 'a -> bool; }
+\end{lstlisting}
+%
+A value \code{mm} of type \code{mem_map} maps a member \code{'a} of a
+\json{} object mapped to \code{'o}. \code{mm.name} is the member
+name. \code{mm.type'} is the \json{} type of its value. \code{mm.id}
+is the type witness to represent the member value in the constructor
+of \code{'o}. \code{mm.dec_absent} is a value to use if the member is
+absent on decodes; \code{None} means error on absence. \code{mm.enc}
+is the function to get back the member value from \code{'o} for
+encoding. \code{mm.enc_omit} is a predicate on the value returned by
+\code{mm.enc} to decide whether it should be omitted on encoding;
+usually this tests for equality with the value mentioned in
+\code{mm.dec_absent}.
+
+A member map \code{mm} needs to be added to an object map \code{m} in
+\code{m.mem_decs}, \code{m.mem_encs} and the \code{mm.id} type witness
+must be applied to the object constructor in \code{m.dec}. This is the
+duty of combinators. For example this one describes a required member
+and adds it to an object map:
+
+\begin{lstlisting}[language=ocaml]
+let obj_mem :
+  string -> 'a jsont -> enc:('o -> 'a) ->
+  ('o, 'a -> 'b) obj_map -> ('o, 'b) obj_map
+=
+fun name type' ~enc obj_map ->
+  let id = Type.Id.make () in
+  let dec_absent = None and enc_omit = Fun.const false in
+  let mm = { name; type'; id; dec_absent; enc; enc_omit } in
+  let dec = Dec_app (obj_map.dec, mm.id) in
+  let mem_decs = String_map.add mm.name (Mem_dec mm) obj_map.mem_decs in
+  let mem_encs = Mem_enc mm :: obj_map.mem_encs in
+  { obj_map with dec; mem_decs; mem_encs; }
+\end{lstlisting}
+%
+At this point we can provide the full implementations of the combinators
+used in the message object modelling example given in \autoref{sec:jsont}.
+%
+\begin{lstlisting}[language=ocaml]
+let bool = Bool { dec = Fun.id; enc = Fun.id }
+let string = String { dec = Fun.id; enc = Fun.id }
+let obj_finish o = Obj { o with mem_encs = List.rev o.mem_encs }
+let obj_map : 'dec -> ('o, 'dec) obj_map = fun make ->
+  let dec = Dec_fun make and shape = Obj_basic Unknown_skip in
+  { dec; mem_decs = String_map.empty; mem_encs = []; shape }
+\end{lstlisting}
+
+\pagebreak
+\subsubsection{Object shapes}
+\label{sec:obj_shape}
+
+The last field of the \code{obj_map} type to describe is the
+\code{shape} field of type \code{obj_shape}:
+\begin{lstlisting}[language=ocaml]
+and 'o obj_shape =
+| Obj_basic : ('o, 'mems, 'builder) unknown_mems -> 'o obj_shape
+| Obj_cases : ('o, 'cases, 'tag) obj_cases -> 'o obj_shape
+\end{lstlisting}
+%
+This value indicates whether the members described in the object map
+are the final word on the shape of the object:
+
+\begin{itemize}
+\item \code{Obj_basic u} indicates that the object's members are fully
+known and the way to handle unknown member is described by \code{u}, see \autoref{sec:unknown_mems}.
+\item \code{Obj_cases cases} indicates that there is a case
+  member described in \code{cases}. Each case member value
+  gives another \code{obj_map} value which further describe the object, see
+  \autoref{sec:obj_cases}.
+\end{itemize}
+%
+The \code{obj_shape} type definition turns object map values into a
+decision tree with \code{Obj_cases} nodes, branches labelled by case
+member values and with \code{Obj_basic} leaves. Each path in this tree
+describes a complete object whose members depend on case member
+values found in the data. We assume that the combinators constructing
+these values enforce the constraint that no member is defined twice in
+a path from the root to a leaf.
+
+Note that once you get an \code{Obj_basic} shape, all data dependent
+shapes have been determined and members can be directly decoded to
+their type without buffering them.
+
+
+\subsubsection{Unknown members}
+\label{sec:unknown_mems}
+
+The type \code{unknown_mems} used by \code{Obj_basic} shapes is:
+
+\begin{lstlisting}[language=ocaml]
+and ('o, 'mems, 'builder) unknown_mems =
+| Unknown_skip : ('o, unit, unit) unknown_mems
+| Unknown_error : ('o, unit, unit) unknown_mems
+| Unknown_keep :
+    ('mems, 'a, 'builder) mems_map * ('o -> 'mems) ->
+    ('o, 'mems) unknown_mems
+\end{lstlisting}
+%
+A value \code{u} of type \code{unknown_mems} maps to \code{'mems} the
+unknown members of a \json{} object mapped to \code{'o}. It
+respectively indicates to skip, error, or keep them. In the latter
+case the \code{Unknown_keep (m, enc)} value describes with \code{enc} how
+to get them back from \code{'o} for encoding and with \code{m}, how to map
+them to a value of type \code{'mems}. The values \code{enc} and
+\code{m} are kept separate because the type \code{'o} is bespoke while
+unknown member maps can be reused across object maps. The value
+\code{m} is of this type:
+%
+\begin{lstlisting}[language=ocaml]
+and ('mems, 'a, 'builder) mems_map =
+{ mems_type : 'a jsont;
+  id : 'mems Type.Id.t;
+  dec_empty : 'builder;
+  dec_add : string -> 'a -> 'builder -> 'builder;
+  dec_finish : 'builder -> 'mems
+  enc : 'acc. (string -> 'a -> 'acc -> 'acc) -> 'mems -> 'acc -> 'acc }
+\end{lstlisting}
+%
+This record maps unknown members of uniform \json{} type
+\code{m.mems_type} to a value of type \code{'mems} built using values
+of types \code{'builder}. Use the \json{} type \code{json}
+(\autoref{sec:any_case}) in \code{m.mems_type} for partial object
+modelling or objects that need to preserve foreign
+members. \code{m.id} is the type witness to represent the \code{'mems}
+value in the object constructor. For decoding, we start with the value
+\code{m.dec_empty}, unknown members are added with \code{m.dec_add}
+and the final \code{'mems} value is returned by
+\code{m.dec_finish}. For encoding \code{m.enc} allows to recover from
+\code{'mems} the unknown members to encode them in the \json{} object.
+
+
+\subsubsection{Object cases}
+\label{sec:obj_cases}
+
+Type type \code{obj_cases} used by \code{Obj_cases} shapes is:
+
+\begin{lstlisting}[language=ocaml]
+and ('o, 'cases, 'tag) obj_cases =
+{ tag : ('o, 'tag) mem_map; (* 'o is irrelevant, 'tag is not stored *)
+  tag_compare : 'tag -> 'tag -> int;
+  id : 'cases Type.Id.t;
+  cases : ('cases, 'tag) case list;
+  enc : 'o -> 'cases;
+  enc_case : 'cases -> ('cases, 'tag) case_value; }
+\end{lstlisting}
+%
+A value \code{m} of type \code{obj_cases} maps to \code{'cases} the
+object cases of an object mapped to \code{'o}. Cases are selected by
+the value of a case member of type \code{'tag} described in
+\code{m.tag}. Tag values are not stored in \code{'o} (the decoded case
+value is) so the \code{'o} parameter, \code{m.tag.id} and
+\code{m.tag.enc} are unused here. \code{m.tag_compare} allows to
+compare case tags. \code{m.id} is the type witness to represent the
+cases in the constructor of \code{'o}. \code{m.cases} is the list of
+cases. This is not a function on \code{'tag} values in order to make
+the description enumerable (e.g. for schema documentation
+generation). The type \code{case} hides the \code{'case}
+parameter of the type \code{case_map} which describes cases:
+
+\begin{lstlisting}[language=ocaml]
+and ('cases, 'tag) case =
+| Case : ('cases, 'case, 'tag) case_map -> ('cases, 'tag) case
+
+and ('cases, 'case, 'tag) case_map =
+{ tag : 'tag;
+  obj_map : ('case, 'case) obj_map;
+  dec : 'case -> 'cases; }
+\end{lstlisting}
+%
+A value \code{cm} of type \code{case_map} describes a case of type
+\code{'case} part of the type \code{'cases}. \code{cm.tag} is the tag
+value that identifies the case in the data. \code{cm.obj_map} describes the
+additional shape this case gives to the object. \code{cm.dec} injects
+the decoded case into the type that gathers them.
+
+For encoding cases, the \code{m.enc} function of \code{obj_cases}
+gets back the case from \code{'o}. To find out how to encode it, the
+function \code{m.enc_case} is used. It returns a value of type
+\code{case_value} which has a the actual case value and its map
+for encoding:
+
+\begin{lstlisting}[language=ocaml]
+and ('cases, 'tag) case_value =
+| Case_value :
+    ('cases, 'case, 'tag) case_map * 'case -> ('cases, 'tag) case_value
+\end{lstlisting}
+%
+The \code{m.enc_case} function is the only ad-hoc function that needs
+to be devised specifically for \code{jsont} values. All the other
+functions to describe objects are natural constructors and accessors
+of \ml{} types.
+
+The design for object cases allows to map them to a record type
+which has common fields for all cases and a field for the cases:
+%
+\begin{lstlisting}[language=ocaml]
+type type' = C1 of C1.t | C2 of C2.t $\ldots$
+type t =
+{ $\ldots$ (* Fields common to all cases *); type' : type'; }
+\end{lstlisting}
+%
+but they can also be described individually and mapped to
+ a ``toplevel'' variant type if \code{'cases} coincides with \code{'o}:
+%
+\begin{lstlisting}[language=ocaml]
+type t = C1 of C1.t | C2 of C2.t $\ldots$
+\end{lstlisting}
+
+\section{Decode and encode}
+\label{sec:convert}
+
+Given a \code{jsont} value we can decode and encode \json{} with \ml{}
+values without constructing generic \code{Json.t} values; except
+transiently for decoding object instances with data dependent shapes
+and poorly ordered members. Implementing a \json{} codec is beyond the
+scope of this paper but the \hyperref[sec:appendix]{Appendix} has
+implementations for \code{decode} and \code{encode} functions that convert
+\ml{} values with generic \code{Json.t} values.
+
+For \code{decode} we took care not to assume full in-memory access to
+an object's members. It thus shows how a decoder can proceed to
+provide best-effort on-the-fly decoding. Except for case members, the
+last occurence of duplicate members takes over, however all definitions
+must type as defined by the object map otherwise the decode
+errors. These limitations on duplicate members could be lifted with a
+more complex decoder but it may not be worth the trouble. The case for
+objects is more intricate than we would like it to be, but we blame
+\json{}'s loose specification for that.
+
+Otherwise the implementation of these functions mostly consists in
+recursing on the \code{jsont} values to boringly invoke the menagerie
+of functions that are packed therein.
+
+\section{Query and update}
+\label{sec:queryx}
+
+Since we can now interpose our functions in every coding context we
+get a very flexible data processing system. A type for data queries
+and a function to execute them can be as simple as:
+
+\begin{lstlisting}[language=ocaml]
+type 'a query = 'a jsont
+let query : 'a query -> Json.t -> 'a = decode
+\end{lstlisting}
+%
+In this view, queries are just transforming decodes. Their encoding
+direction can be made to fail or defined with anything that feels
+sensitive to encode the query result to.
+
+To navigate the structure of \json{} values to apply a query on a
+subtree, the following composable indexing combinators can be used:
+
+\begin{lstlisting}[language=ocaml]
+let get_mem : string -> 'a query -> 'a query = fun name q ->
+  obj_map Fun.id |> obj_mem name q ~enc:Fun.id |> obj_finish
+
+let get_nth : int -> 'a query -> 'a query = fun nth q ->
+  let dec_empty = None and dec_add _ _ v = Some v in
+  let dec_skip _ k = nth <> k in
+  let dec_finish = function None -> failwith "too short" | Some v -> v in
+  let enc f acc v = f acc v (* Singleton array with the query result *) in
+  Array { elt = q; dec_empty; dec_add; dec_skip; dec_finish; enc }
+\end{lstlisting}
+%
+The \code{get_nth} combinator explains the presence of \code{dec_skip}
+in the \code{array_map} type (\autoref{sec:array_case}). The query
+\code{q} only needs to succeed on the \code{nth} element. Without
+\code{dec_skip} we would apply it on every element of the array which
+is undesirable. The \code{dec_skip} field is the only bit in the
+design that was specifically added to support queries. For objects,
+skipping unknown members is quite natural to have in order to support data
+schema evolution.
+
+Typed updates of \json{} data is easy to specify as \code{Json.t}
+returning \json{} types. Decoders invoking such queries return updated
+\json{} as \code{Json.t} values. Here is a kernel of composable
+combinators to peform updates:
+
+\begin{lstlisting}[language=ocaml]
+val update_mem : string -> 'a jsont -> Json.t jsont
+val update_nth : int -> 'a jsont -> Json.t jsont
+val delete_mem : string -> Json.t jsont
+val delete_nth : int -> Json.t jsont
+val const : 'a jsont -> 'a -> 'a jsont
+\end{lstlisting}
+%
+The \code{update_mem} and \code{update_nth} combinators apply
+on the member or index value the decoder of the given \json{} type
+and replace it with the encoding of the result. Chaining update
+combinators allows to navigate arbitrarily nested \json{} to apply an
+update. All these combinators are simple \code{Map} over the \json{}
+type \code{json} (\autoref{sec:any_case}) with suitable uses of
+\code{encode} and \code{decode}. The implementations of
+\code{update_mem}, \code{delete_mem} and \code{const} are:
+
+\begin{lstlisting}[language=ocaml]
+let update_mem : string -> 'a jsont -> Json.t jsont = fun name q ->
+  let dec = function
+  | Json.Obj ms ->
+      let update (n, v as m) =
+        if n = name then (n, encode q (decode q v)) else m
+      in
+      Json.Obj (List.map update ms)
+  | _ -> failwith "type error"
+  in
+  Map { dom = json; map = { dec; enc = Fun.id } }
+
+let delete_mem : string -> Json.t jsont = fun name ->
+  let dec = function
+  | Json.Obj ms -> Json.Obj (List.filter (fun (n, _) -> n <> name) ms)
+  | _ -> type_error ()
+  in
+  Map { dom = json; map = { dec; enc = Fun.id } }
+
+let const : 'a jsont -> 'a -> 'a jsont = fun t v ->
+  let dec _ = v and enc _ = encode t v in
+  Map { dom = json; map = { dec; enc } }
+\end{lstlisting}
+\section{The recipe}
+\label{sec:recipe}
+
+None of what was presented here is specific to the \json{} data
+model. A datatype similar to \code{jsont} (\autoref{sec:jsont}) can be
+devised for any data model. The recipe is as follows.
+%
+\begin{itemize}
+\item A base case is needed for every base type of the model.  Having
+  maps in these cases allows to accurately represent their coding contexts.
+  (\autoref{sec:base_cases})
+\item An \code{Array}-like case is needed for mapping the model's type for
+  arrays. (\autoref{sec:array_case})
+\item An \code{Obj}-like case is needed for mapping the model's type for
+  key-value maps or records. The \ml{} ingredients here are:
+  projection functions for encoding and, for decoding, a constructor
+  function instrumented by a datatype representing function applications
+  using type witnesses to indirectly refer to argument values.
+  (\autoref{sec:obj_case})
+\item An \code{Any}-like case is needed if the model is dynamically
+  typed. It is used to map implicit sums of the model's types to
+  a uniform \ml{} type. (\autoref{sec:any_case})
+\item The \code{Map} case is needed for composing map values.
+  (\autoref{sec:map_case})
+\item The \code{Rec} case is needed in a strict \ml{} for representing
+  recursive values of the data model. (\autoref{sec:jsont})
+\end{itemize}
+%
+And with this we hope to have made your future data soups more edible
+in \ml{}.
+
+\appendix
+
+\begin{thebibliography}{}
+\bibitem[\protect\citename{Bray, }2017]{json}
+  Bray, T., Ed. (2017)
+  The JavaScript Object Notation (JSON) Data Interchange Format.
+  {\it RFC 8259}.
+  \url{https://doi.org/10.17487/RFC8259}
+
+\bibitem[\protect\citename{Guo, }2023]{ecmascript}
+  Guo, S., Ficarra M., Gibbons, K., Eds (2023)
+  ECMAScript® 2023 Language Specification. ECMA-262.
+  \url{https://262.ecma-international.org/14.0/}
+\bibitem[\protect\citename{Gibbons, }2007]{datatypegeneric}
+  Gibbons, J. (2007)
+  Datatype-Generic Programming. {\it Lecture Notes in Computer Science}.
+  vol 4719.
+  \url{https://doi.org/10.1007/978-3-540-76786-2\_1}
+
+\bibitem[\protect\citename{Kennedy, }2004]{picklers}
+  Kennedy, A. J., (2004)
+  Pickler combinators. {\it Journal of Functional Programming}.
+  14(6), 727-739.
+  \url{https://doi.org/10.1017/S0956796804005209}
+
+\bibitem[\protect\citename{Leroy {\it et al.}, }2023]{ocaml}
+  Leroy, X., Doligez, D., Frisch, A., Garrigue, J., Rémy, D.,
+  Sivaramakrishnan, KC, \& Vouillon, J. (2023)
+  The OCaml system release 5.1. Documentation and user’s manual.
+  \mbox{\url{https://ocaml.org/manual}}
+\end{thebibliography}
+
+
+\section*{Appendix}
+\label{sec:appendix}
+
+\ocaml{} 5.1 implementation of the \code{decode} and \code{encode}
+functions mentioned in \autoref{sec:convert}.
+
+\lstset{basicstyle=\relscale{0.84}\ttfamily\linespread{1.1}\selectfont}
+\begin{lstlisting}[language=ocaml]
+
+module String_map = Map.Make (String)
+
+(* Errors *)
+
+let type_error () = failwith "type error"
+let unexpected_member n = failwith ("Unexpected member " ^ n)
+let missing_member n = failwith ("Missing member " ^ n)
+let unknown_case_tag () = failwith "Unknown case tag"
+
+
+
+(* Heterogeneous key-value maps *)
+
+module Dict = struct
+  module M = Map.Make (Int)
+  type binding = B : 'a Type.Id.t * 'a -> binding
+  type t = binding M.t
+  let empty = M.empty
+  let add k v m = M.add (Type.Id.uid k) (B (k, v)) m
+  let find : type a. a Type.Id.t -> t -> a option =
+  fun k m -> match M.find_opt (Type.Id.uid k) m with
+  | None -> None
+  | Some B (k', v) ->
+      match Type.Id.provably_equal k k' with
+      | Some Type.Equal -> Some v | None -> assert false
+end
+
+(* Decode *)
+
+let rec decode : type a. a jsont -> Json.t -> a =
+fun t j -> match t with
+| Null map -> (match j with Json.Null v -> map.dec v | _ -> type_error ())
+| Bool map -> (match j with Json.Bool b -> map.dec b | _ -> type_error ())
+| Number map ->
+    (match j with
+    | Json.Number n -> map.dec n | Json.Null _ -> map.dec Float.nan
+    | _ -> type_error ())
+| String map -> (match j with Json.String s -> map.dec s | _ -> type_error ())
+| Array map ->
+    (match j with Json.Array vs -> decode_array map vs | j -> type_error ())
+| Obj map ->
+    (match j with Json.Obj mems -> decode_obj map mems | j -> type_error ())
+| Map map -> map.map.dec (decode map.dom j)
+| Any map -> decode_any t map j
+| Rec t -> decode (Lazy.force t) j
+
+and decode_array : type a e b. (a, e, b) array_map -> Json.t list -> a =
+fun map vs ->
+  let add (i, a) v =
+    i + 1, (if map.dec_skip a i then a else map.dec_add a i (decode map.elt v))
+  in
+  map.dec_finish (snd (List.fold_left add (0, map.dec_empty) vs))
+
+and decode_obj : type o. (o, o) obj_map -> Json.obj -> o =
+fun map mems ->
+  apply_dict map.dec @@
+  decode_obj_map map String_map.empty String_map.empty Dict.empty mems
+
+and decode_obj_map : type o.
+  (o, o) obj_map -> mem_dec String_map.t -> mem_dec String_map.t -> Dict.t ->
+  Json.obj -> Dict.t
+=
+fun map mem_miss mem_decs dict mems ->
+  let u n _ _ = invalid_arg (n ^ "member defined twice") in
+  let mem_miss = String_map.union u mem_miss map.mem_decs in
+  let mem_decs = String_map.union u mem_decs map.mem_decs in
+  match map.shape with
+  | Obj_cases cases -> decode_obj_case cases mem_miss mem_decs dict [] mems
+  | Obj_basic u ->
+      match u with
+      | Unknown_skip -> decode_obj_basic u () mem_miss mem_decs dict mems
+      | Unknown_error -> decode_obj_basic u () mem_miss mem_decs dict mems
+      | Unknown_keep (map, _) ->
+          decode_obj_basic u map.dec_empty mem_miss mem_decs dict mems
+
+and decode_obj_basic : type o map builder.
+  (o, map, builder) unknown_mems -> builder -> mem_dec String_map.t ->
+  mem_dec String_map.t -> Dict.t -> Json.obj -> Dict.t
+=
+fun u umap mem_miss mem_decs dict -> function
+| [] ->
+    let dict = match u with
+    | Unknown_skip | Unknown_error -> dict
+    | Unknown_keep (map, _) -> Dict.add map.id (map.dec_finish umap) dict
+    in
+    let add_default _ (Mem_dec m) dict = match m.dec_absent with
+    | Some v -> Dict.add m.id v dict | None -> missing_member m.name
+    in
+    String_map.fold add_default mem_miss dict
+| (n, v) :: mems ->
+    match String_map.find_opt n mem_decs with
+    | Some (Mem_dec m) ->
+        let dict = Dict.add m.id (decode m.type' v) dict in
+        let mem_miss = String_map.remove n mem_miss in
+        decode_obj_basic u umap mem_miss mem_decs dict mems
+    | None ->
+        match u with
+        | Unknown_skip -> decode_obj_basic u umap mem_miss mem_decs dict mems
+        | Unknown_error -> unexpected_member n
+        | Unknown_keep (map, _) ->
+            let umap = map.dec_add n (decode map.mems_type v) umap in
+            decode_obj_basic u umap mem_miss mem_decs dict mems
+
+and decode_obj_case : type o cases tag.
+  (o, cases, tag) obj_cases -> mem_dec String_map.t -> mem_dec String_map.t ->
+  Dict.t -> Json.obj -> Json.obj -> Dict.t
+=
+fun cases mem_miss mem_decs dict delay mems ->
+  let decode_case_tag tag =
+    let eq_tag (Case c) = cases.tag_compare c.tag tag = 0 in
+    match List.find_opt eq_tag cases.cases with
+    | None -> unknown_case_tag ()
+    | Some (Case case) ->
+        let mems = List.rev_append delay mems in
+        let dict = decode_obj_map case.obj_map mem_miss mem_decs dict mems in
+        Dict.add cases.id (case.dec (apply_dict case.obj_map.dec dict)) dict
+  in
+  match mems with
+  | [] ->
+      (match cases.tag.dec_absent with
+      | Some t -> decode_case_tag t | None -> missing_member cases.tag.name)
+  | (n, v as mem) :: mems ->
+      if n = cases.tag.name then decode_case_tag (decode cases.tag.type' v) else
+      match String_map.find_opt n mem_decs with
+      | None -> decode_obj_case cases mem_miss mem_decs dict (mem :: delay) mems
+      | Some (Mem_dec m) ->
+          let dict = Dict.add m.id (decode m.type' v) dict in
+          let mem_miss = String_map.remove n mem_miss in
+          decode_obj_case cases mem_miss mem_decs dict delay mems
+
+
+and decode_any : type a. a jsont -> a any_map -> Json.t -> a =
+fun t map j ->
+  let dec t m j = match m with Some t -> decode t j | None -> type_error () in
+  match j with
+  | Json.Null _ -> dec t map.dec_null j
+  | Json.Bool _ -> dec t map.dec_bool j
+  | Json.Number _ -> dec t map.dec_number j
+  | Json.String _ -> dec t map.dec_string j
+  | Json.Array _ -> dec t map.dec_array j
+  | Json.Obj _ -> dec t map.dec_obj j
+
+(* Encode *)
+
+let rec encode : type a. a jsont -> a -> Json.t =
+fun t v -> match t with
+| Null map -> Json.Null (map.enc v)
+| Bool map -> Json.Bool (map.enc v)
+| Number map -> Json.Number (map.enc v)
+| String map -> Json.String (map.enc v)
+| Array map ->
+    let encode_elt a elt = (encode map.elt elt) :: a in
+    Json.Array (List.rev (map.enc encode_elt [] v))
+| Obj map -> Json.Obj (List.rev (encode_obj map v []))
+| Any map -> encode (map.enc v) v
+| Map map -> encode map.dom (map.map.enc v)
+| Rec t -> encode (Lazy.force t) v
+
+and encode_obj : type o. (o, o) obj_map -> o -> Json.obj -> Json.obj =
+fun map o obj ->
+  let encode_mem obj (Mem_enc map) =
+    let v = map.enc o in
+    if map.enc_omit v then obj else (map.name, encode map.type' v) :: obj
+  in
+  let obj = List.fold_left encode_mem obj map.mem_encs in
+  match map.shape with
+  | Obj_basic (Unknown_keep (map, enc)) ->
+      let encode_mem n v obj = (n, encode map.mems_type v) :: obj in
+      map.enc encode_mem (enc o) obj
+  | Obj_basic _ -> obj
+  | Obj_cases cases ->
+      let Case_value (case, c) = cases.enc_case (cases.enc o) in
+      let obj =
+        if cases.tag.enc_omit case.tag then obj else
+        (cases.tag.name, encode cases.tag.type' case.tag) :: obj
+      in
+      encode_obj case.obj_map c obj
+\end{lstlisting}
+
+\label{lastpage01}
+\end{document}

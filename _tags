@@ -1,0 +1,9 @@
+true : bin_annot, safe_string
+<_b0> : -traverse
+<src> : include
+
+<src/bytesrw> : include
+<src/bytesrw/**> : package(bytesrw)
+
+<src/brr/**> : package(brr)
+<test/jsont_tool*> : package(cmdliner bytesrw b0.std)

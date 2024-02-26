@@ -1,0 +1,115 @@
+{0 Jsont {%html: <span class="version">%%VERSION%%</span>%}}
+
+Jsont is an OCaml library for declarative JSON data manipulation. It
+provides:
+
+- Combinators for describing JSON data using the OCaml values of your
+  choice. The descriptions can be used by generic functions to
+  decode, encode, query and update JSON data without having to
+  construct a generic JSON representation.
+- A JSON codec with optional text location tracking and layout
+  preservation. The codec is compatible with effect-based concurrency.
+
+The descriptions are independent from the codec and can be used by
+third-party processors or codecs.
+
+See the {{!quick_start}quick start}.
+
+{1:manuals Manuals}
+
+The following manuals are available.
+
+{ul
+{- The {{!quick_start}quick start} should get you started.}
+{- The {{!cookbook}[Jsont] cookbook} has a few conventions and JSON
+   data modelling recipes.}}
+
+The {{:https://github.com/dbuenzli/jsont/tree/master/test}test directory}
+in the repository of Jsont has a few more examples.
+
+{1:jsont Library [jsont]}
+
+{!modules:Jsont}
+
+{1:jsont_bytesrw Library [jsont.bytesrw]}
+
+This library depends on the {!bytesrw} library and exports the [jsont] library.
+
+{!modules:Jsont_bytesrw}
+
+{1:jsont_brr Library [jsont.brr]}
+
+This library depends on the {!brr} library and exports the [jsont] library.
+
+{!modules:
+Jsont_brr}
+
+{1:quick_start Quick start}
+
+Given JSON for task items encoded in JSON as follows:
+{[
+let data =
+{|
+{ "task": "Make new release",
+  "status": "todo",
+  "tags": ["work", "softwre"] }
+|}
+]}
+
+First we can correct that typo in the ["tags"] list with:
+
+{[
+let () =
+  let p = Jsont.Path.(root |> mem "tags" |> nth 1) in
+  let update = Jsont.(set_path string p "software") in
+  let correct = Jsont_bytesrw.recode_string ~layout:true update data in
+  print_string (Result.get_ok correct)
+]}
+
+Now to work with the data in OCaml without pain we can model it by:
+
+{[
+module Status = struct
+  type t = Todo | Done | Cancelled
+  let assoc = ["todo", Todo; "done", Done; "cancelled", Cancelled ]
+  let jsont = Jsont.enum ~kind:"Status" assoc
+end
+
+module Item = struct
+  type t = { task : string; status : Status.t; tags : string list; }
+  let make task status tags = { task; status; tags }
+  let task i = i.task
+  let status i = i.status
+  let tags i = i.tags
+  let jsont =
+    Jsont.Obj.map ~kind:"Item" make
+    |> Jsont.Obj.mem "task" Jsont.string ~enc:task
+    |> Jsont.Obj.mem "status" Status.jsont ~enc:status
+    |> Jsont.Obj.mem "tags"
+         Jsont.(list string) ~dec_absent:[] ~enc:tags ~enc_omit:(( = ) [])
+    |> Jsont.Obj.finish
+end
+]}
+
+Lists of task items can be serialized to strings with, for example,
+{!Jsont_bytesrw}:
+
+{[
+let items = Jsont.list Item.jsont
+let items_of_json s = Jsont_bytesrw.decode_string items s
+let items_to_json ?format is = Jsont_bytesrw.encode_string ?format items is
+]}
+
+If you are using [js_of_ocaml] the browser's built-in JavaScript
+parser can be used with {!Jsont_brr} from the [jsont.brr] library:
+
+{[
+let items_of_json s = Jsont_brr.decode items s
+let items_to_json is = Jsont_brr.encode items is
+]}
+
+The {{!page-cookbook}cookbook} has more JSON modelling recipes, the
+{{:https://erratique.ch/repos/jsont/tree/test/topojson.ml}[topojson.ml]}
+and
+{{:https://erratique.ch/repos/jsont/tree/test/geojson.ml}[geojson.ml]}
+in the repository provide full examples of JSON schema modelisation.

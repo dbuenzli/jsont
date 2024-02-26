@@ -1,0 +1,338 @@
+Submitted: 2024-06-26
+Decision: 2024-08-29
+
+Dear Mr. Bünzli:
+
+Manuscript ID JFP-2024-0027 entitled "An alphabet for your data soups"
+which you submitted to the Journal of Functional Programming, has been
+reviewed. The comments from reviewers are included at the bottom of
+this letter.
+
+In view of the criticisms of the reviewers, I must decline the
+manuscript for publication in the Journal of Functional Programming at
+this time. However, a *new* manuscript may be submitted which takes
+into consideration these comments.
+
+Please note that resubmitting your manuscript does not guarantee
+eventual acceptance, and that your resubmission will be subject to
+re-review by the reviewers before a decision is rendered.
+
+You will be unable to make your revisions on the originally submitted
+version of your manuscript. Instead, revise your manuscript and submit
+it as a new paper.
+
+If you decide to resubmit, please state the manuscript number of the
+previous submission in your cover letter.
+
+
+Sincerely,
+Prof. Functional Pearls
+Journal of Functional Programming
+prof-pearls@online.de
+
+Editors' Comments to Author
+
+Reviewers' Comments to Author:
+Referee: 1
+
+Comments to the Author
+
+This paper presents an OCaml combinator library for converting between
+JSON data and ML typed values. The library may be a joy to use, but
+this functional pearl doesn’t show that: Concrete examples of how to
+use the library are scant; for instance, Section 3.5 lists three
+“patterns found in JSON data schemas that we want to support”, but
+only the first pattern is illustrated (“in Section 3”), and the “query
+and update” combinators in Section 5 are not shown in use at all. The
+library may be intellectually stimulating to build, but this
+functional pearl doesn’t show that: Implementation code often appears
+whose purpose is unclear (for instance, in Section 3.5.1).
+
+I suggest the author think long and hard about what is instructive or
+nifty or interesting (hereafter “joyful”) about building or using this
+library. Then, pare down the library and the writing to only that
+part. For instance, if “objects as uniform key-value maps” and
+“objects as sums” are not joyful, then get rid of them. If query and
+update are not joyful, then get rid of them and remove dec_skip as
+well. On the other hand, if query and update are what’s joyful, then
+do you really need to decode and encode JSON data in order to share
+that joy? Finally, be sure to show what’s good with concrete examples,
+early and often.
+
+Referee: 2
+
+Comments to the Author
+# Summary
+
+This pearl describes a richly typed eDSL to write bidirectional
+maps between JSON with an underlying (unenforced, potentially
+dynamic) format and ML values.
+The core of the paper is dedicated to describing at length
+the effort that goes into defining the GADT used to model
+these maps.
+A final section develops how one can reuse the machinery to
+define query & update combinators operating directly over the
+JSON objects.
+
+# Assessment
+
+I think this is interesting work however it currently feels
+too brutally technical and without clear design / correctness
+criteria to read like a pearl: « programs are fun, and they
+teach important programming techniques and fundamental design
+principle » (Jon Bentley on the definition of a programming
+pearl cf. https://www.cs.ox.ac.uk/people/jeremy.gibbons/pearls/)
+
+I would also like to see more of a discussion of the related work.
+
+# Main comments
+
+## Missing examples
+
+If the main goal is well motivated by the important goal of
+being able to program against a JSON "soup" in a structured
+and typed manner, each construct is poorly justified.
+
+It would be nice for each section to have some small examples
+justifying why some of these definitions are so complex. Give
+us concrete instances of these structures you are describing!
+
+p5: Any case
+This was really confusing to me at first until I understood
+(?) that the idea is that e.g. decoding (Number n) at type
+(Any m) amounts to decoding (Number n) at type (m.dec_number).
+I think it would be useful to sprinkle some examples here instead
+of just relying on "it embeds dynamic typing in our datatype".
+I even wonder whether it'd be useful to show the code for
+`decode_any` in parallel with the definition of `option`.
+
+p9: Object shapes.
+Again this lacks motivation IMO. Give us plenty of examples
+showing why all of this complexity is needed!
+
+The description of object cases is even more puzzling.
+
+## Missing explanations
+
+p7: dec_fun definition
+Please give a one sentence definitition of type ids so that
+we don't need to lookup the ocaml docs just to understand what
+they are. Looking at the code for `Dict.t`, it seems to be a
+unique `int` allowing you to test type equality.
+
+AFAIU this means all the arguments need to have different
+types. Why is that a sensible assumption?
+
+But looking at obj_mem, `Type.Id.make ()` seems to suggest
+it's not in fact a unique ID per type but rather an ID for
+something that happens to have this type.
+
+Again, this would be a lot easier to understand with a
+proper explanation from the get go.
+
+## Correction of type description
+
+Given that the typed description induces an encoder and a
+decoder, it would be nice to have a correctness theorem.
+I suspect there is no hope to get `encode . decode = id`
+(multiple possible representations of the same value) but
+we definitely want to have `decode . encode = id`.
+
+Correspondingly, I feel the presentation is missing the
+precise characterisation of the invariants we expect the
+users to respect. Ideally these could be expressed as
+properties testable using something like quickcheck.
+
+In particular, this means specifying:
+
+p4: Map case
+define "bidirectional map" more precisely: what sort of
+properties do you expect? E.g. `dec` being a partial inverse
+to `enc` but not the other way around? More than that? Less?
+
+p5: Array case
+Again here it'd be nice to have a property you expect to
+hold for the component to be well behaved. I would expect
+something along the lines of:
+`dec_finish (enc (\ b, elt -> dec_add b ??? elt) dec_empty arr) = arr`
+except that `dec_add` takes an index which is not available from
+inside the `enc` fold.
+
+## Missing related work section
+
+You cited pickler combinators and alluded to generic programming
+but I think it would be interesting to discuss more extensively
+the fairly important tradition of writing "invertible parsers",
+"bidirectional programs", "partial isomorphisms", etc. to
+obtain pairs of a parser and a pretty printer e.g.
+
+* There and back again: arrows for invertible programming by Alimarine
+* Invertible syntax descriptions: unifying parsing and pretty printing by Rendel
+* Correct-by-construction pretty-printing by Nils Anders Danielsson
+* Generic packet descriptions by Van Geest
+* FliPpr: A System for Deriving Parsers from Pretty-Printers by Matsuda
+
+Some of these (Generic packet descriptions) include types of
+formats that your approach cannot handle (cf. next point)
+
+The query & update section naturally brings up the (unexplored?)
+relationship to lenses & prisms.
+
+
+## Missing discussion of possible extension
+
+It would be interesting to have a discussion of some
+features of common format specifications that are not
+tackled by the current work.
+
+E.g. some formats specify
+- *computed* fields e.g. checksums, or
+- *constrained* fields e.g. a payload whose length is specified
+in another field.
+
+Could these be accommodated? Or do you need to move to
+a more powerful type system like in 'Generic packet
+descriptions' by Van Geest mentioned above?
+
+# Minor issues
+
+p3: Typed representation
+"laziest readers" -> find better wording (or is that meant
+to be a pun for readers using a lazy ML?)
+
+p5: Array case
+Given that skip & add take an index, is it worth
+adding a type alias `type index = int` to suggest
+it's meant to be a non-negative number?
+
+
+Referee: 3
+
+Comments to the Author
+
+---- Summary ----
+
+This paper describes a library for working with JSON data. The key idea
+is not to describe JSON directly (as in Section 2), but rather to define
+a GADT describing the conversion between some OCaml type a and its JSON
+representation (Section 3). Given such a description, it is easy to
+define the actual encoding/decoding with respect to JSON and functions
+to query/update JSON data.
+
+---- Review ----
+
+Conversion between algebraic datatypes and JSON is a well studied
+problem: there are 100+ OCaml packages and 300+ Haskell packages for
+interfacing with (some form of) JSON data. It is certainly an
+interesting and important problem.
+
+My main concern with this paper is that it descibes a solution (the GADT
+is Section 3), without explicitly introducing the problem and motivating
+the underlying design choices that lead to this solution. This is very
+important, not only because there is already so much work in this area,
+but this distinguishes a research paper from a library documentation.
+Especially for a pearl, I am keen to read the _ideas_ that (naturally)
+lead to this solution and not just the code that makes things tick.
+
+Let me illustrate this point with a few examples:
+
+* the GADT jsont has a separate constructor for 'map' -- essentially
+used to map a conversion over another GADT value. This seems rather
+arbitrary: was it necessary for important examples? Could there be an
+alternative GADT that supports map as a defined operation, rather than
+a separate constructor?
+
+* Similarly, the case for arrays, given by the 'array_map' record, has
+several functions to build and convert arrays. Why choose _these_
+functions? Could there be others that are also useful? What
+considerations lead to these primitives?
+
+* The base_map type has conversions between a and b -- can these fail?
+What (roundtrip) properties should they satisfy? There is an obvious
+relation with lensest that should be mentioned at the very least.
+
+* The most elaborate case is that for objects. Here the design is
+pragmatic -- motivated by several typical use cases for objects (given
+at the beginning of section 3.5). Once again, I managed to read along
+with the code, but the principles that lead to this solution are left
+implicit: why does mem_map have precisely these fields? The key
+(heterogeneous) dictionary is in the appendix -- but what purpose does
+'a Type.Id.t serve? The 'apply_dict' function can still fail
+dynamically using Option.get -- is this a problem? If the library aims
+to provide more (type) safety than working with JSON directly, these
+issues and design choices need to be more carefully discussed.
+
+This last point also shows up in section 5, where the various update and
+delete functions can all still throw type errors; similarly, the
+handling of the Any type (section 3.4) seems arbitrary and prone to
+dynamic failure again. If there are so many places where (type) unsafety
+can still sneak in -- what is achieved by the proposed solution? Could
+these limitations be addressed by more fancy type features? And what
+trade-off lead to this particular design?
+
+I would strongly recommend Simon Peyton Jones' talk on "How to write
+great research paper" -- one of the key points it to try to convey the
+main ideas; the implementation should follow naturally.
+
+The current introduction was not helpful in positioning the paper. Many
+of the points made about 'this datatype' don't make much sense on first
+reading -- I haven't seen the datatype yet and found it very hard to
+appreciate these contributions. It would be very helpful to formulate
+the design goals (and limitations!), independently of the actual
+implementation. Making these concrete by means of examples would really
+help -- phrases such as 'partially modelled data schemas', 'datatype
+generic representations' or 'generic representation of the data model'
+do not have much meaning without more context.
+
+A good pearl does not need to exhaustively discuss related work, but
+there are plenty of other papers and libraries that tackle similar
+issues, including but not limited to the view-update problem (and
+lenses), other (generic programming) solutions to JSON
+encoding/decoding, and the many other libraries that tackle the same
+issue.
+
+This work and these ideas may yet lead to an interesting pearl, but the
+article in its current form is not yet ready for publication.
+
+---- Typos / minor suggestions ----
+
+* General, there are no line numbers. The JFP style file requires these
+for submissions -- they would make giving specific feedback much
+easier.
+
+* page 1 - 'directly on their own type system' -- I believe this is not
+a property of dynamic languages in general, but rather the way
+Javascript/Python support objects. Try to be more specific here.
+
+* page 2 - use endashes (--) surrounded by spaces (the JFP default); or
+emdashes (---) without spaces, but never mix these style.
+
+* page 2 - it would be useful to give an example of the Json struct --
+and illustrate why this solution is unsatisfactory to more clearly
+motivate the solution presented in the next section.
+
+* page 3 - I know enough OCaml to get by, but what does ~enc:content
+mean? Why is the twiddle necessary here?
+
+* page 4 - 'mapping unit values with m' sounds like m is a function,
+while it isn't!
+
+* page 4 - 'answer is rather negative' sounds odd, perhaps 'this is not the
+case'? And if it isn't the case,
+
+* page 4 - 'it is not directly evident in our simpler exposition...' -
+this feels like a rather weak argument. I can understand the
+importance of simplifying code for the sake of presentation -- but
+apparently there are other design considerations at play that have not
+yet been mentioned.
+
+* page 6 - sentences like 'the JSON type json which maps any JSON value'
+indicate that there may be a need for better terminology here.
+
+* page 6 ' retaining efficient decodes' grammar - perhaps 'efficient decoding'?
+
+* page 7 - contructor -> constructor
+
+* 'must type as defined by the object map otherwise the decode errors' -
+grammar -> 'all definitions must be typed in accordance with the
+object map otherwise the decoding fails.'

@@ -1,0 +1,2 @@
+jsont: [01;31mError[m: Expected [1mobject member[0m but found [1m2[0m
+              File "invalid-obj1.json", line 1, characters 12-13

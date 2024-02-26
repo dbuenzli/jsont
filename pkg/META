@@ -1,0 +1,34 @@
+description = "Declarative JSON data manipulation for OCaml"
+version = "%%VERSION_NUM%%"
+requires = "bytesrw"
+archive(byte) = "jsont.cma"
+archive(native) = "jsont.cmxa"
+plugin(byte) = "jsont.cma"
+plugin(native) = "jsont.cmxs"
+exists_if = "jsont.cma jsont.cmxa"
+
+package "brr" (
+  directory = "brr"
+  description = "The jsont.brr library"
+  version = "%%VERSION_NUM%%"
+  requires = "brr jsont"
+  exports = "jsont"
+  archive(byte) = "jsont_brr.cma"
+  archive(native) = "jsont_brr.cmxa"
+  plugin(byte) = "jsont_brr.cma"
+  plugin(native) = "jsont_brr.cmxs"
+  exists_if = "jsont_brr.cma jsont_brr.cmxa"
+)
+
+package "bytesrw" (
+  directory = "bytesrw"
+  description = "The jsont.bytesrw library"
+  version = "%%VERSION_NUM%%"
+  requires = "bytesrw jsont"
+  exports = "jsont"
+  archive(byte) = "jsont_bytesrw.cma"
+  archive(native) = "jsont_bytesrw.cmxa"
+  plugin(byte) = "jsont_bytesrw.cma"
+  plugin(native) = "jsont_bytesrw.cmxs"
+  exists_if = "jsont_bytesrw.cma jsont_bytesrw.cmxa"
+)

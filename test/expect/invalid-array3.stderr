@@ -1,0 +1,3 @@
+jsont: [01;31mError[m: Expected [1mJSON value[0m but found [1mend of text[0m
+              File "invalid-array3.json", line 2, characters -1-0
+              File "invalid-array3.json", line 2, characters -1-0: at index 3
