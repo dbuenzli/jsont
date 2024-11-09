@@ -29,7 +29,7 @@ to [null]:
 {[
 let string_null_is_empty =
   let null = Jsont.null "" in
-  let enc _ctx = function "" -> null | _ -> Jsont.string in
+  let enc = function "" -> null | _ -> Jsont.string in
   Jsont.any ~dec_null:null ~dec_string:Jsont.string ~enc ()
 ]}
 
@@ -186,7 +186,6 @@ the above but more concise.
 In JSON objects maps, there are three different ways to handle
 object members that have not been declared by a {!Jsont.Obj.mem}
 or {!Jsont.Obj.opt_mem}.
-
 
 {3:skipping Skipping}
 

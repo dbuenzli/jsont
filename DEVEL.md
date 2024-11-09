@@ -13,4 +13,4 @@
    hyperfine 'jq -c . tmp/parcels.json'
    hyperfine 'jsontrip tmp/parcels.json'
    hyperfine "$(b0 --path -- jsont) fmt --no-locs -fminify tmp/parcels.json"
-    
+   hyperfine "$(b0 --path -- geojson) tmp/parcels.json"

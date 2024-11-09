@@ -285,30 +285,6 @@ module Path : sig
   (** [pp_trace] formats paths as a stack trace, if not empty. *)
 end
 
-(** JSON encoding and decoding contexts. *)
-module Context : sig
-  type t
-  (** The type for JSON encoding or decoding contexts. *)
-
-  val make : Path.t -> t
-  (** [make path] is the context at [path]. *)
-
-  val root : t
-  (** [root] is the toplevel context. *)
-
-  val path : t -> Path.t
-  (** [path] is the JSON path of the context. *)
-
-  val is_root : t -> bool
-  (** [is_top c] is {!Path.is_root}[ (path c)]. *)
-
-  val push_nth : int node -> t -> t
-  (** [push_nth n] is a context for the [n]th element of an array. *)
-
-  val push_mem : string node -> t -> t
-  (** [push_mem n] is a context for the member named [n] of an object. *)
-end
-
 (** Sorts of JSON values. *)
 module Sort : sig
   type t =
@@ -330,6 +306,25 @@ end
 (** Encoding, decoding and query errors. *)
 module Error : sig
 
+  (** JSON error contexts. *)
+  module Context : sig
+    type t = (string node * Path.index) list
+    (** The type for JSON encoding or decoding contexts. The kind
+        of array or object and its index. *)
+
+    val empty : t
+    (** [empty] is the empty context. *)
+
+    val is_empty : t -> bool
+    (** [is_empty c] is {!Path.is_root}[ (path c)]. *)
+
+    val push_array : string node -> int node -> t -> t
+    (** [push_nth n] is a context for the [n]th element of an array. *)
+
+    val push_object : string node -> string node -> t -> t
+    (** [push_mem n] is a context for the member named [n] of an object. *)
+  end
+
   type kind
   (** The type for kind of errors. *)
 
@@ -343,13 +338,20 @@ module Error : sig
   (** [make_msg ctx m msg] is an error with message [msg] for meta [m]
       in context [ctx]. *)
 
-  val msg : Context.t -> Meta.t -> string -> 'a
+  val msg : Meta.t -> string -> 'a
   (** [error ctx m msg] raises an error with message [msg] for meta
       [m] in context [ctx]. *)
 
-  val msgf :
-    Context.t -> Meta.t -> ('a, Stdlib.Format.formatter, unit, 'b) format4 -> 'a
+  val msgf : Meta.t -> ('a, Stdlib.Format.formatter, unit, 'b) format4 -> 'a
   (** [fmt] is like {!val-msg} but formats an error message. *)
+
+  val push_array : string node -> int node -> t -> 'a
+  (** [push_array array_kind index e] pushes the given context
+      on [e] and raises. *)
+
+  val push_object : string node -> string node -> t -> 'a
+  (** [push_object obj_kind index e] pushes the given context
+      on [e] and raises. *)
 
   val pp : t fmt
   (** [pp_error] formats errors. *)
@@ -367,7 +369,7 @@ module Error : sig
   *)
 
   val missing_mems :
-    Context.t -> Meta.t -> obj_kind:string -> exp:string list ->
+    Meta.t -> obj_kind:string -> exp:string list ->
     fnd:string list -> 'a
   (** [missing_mems ctx m ~obj_kind ~exp ~mems] errors when member
       named [exp] were expected in an object of kind [obj_kind] with
@@ -396,7 +398,7 @@ type 'a t
 (** The type for JSON types.
 
     A value of this type represents a subset of JSON values mapped to
-    a subset of values of type ['a] (and vice-versa). *)
+    a subset of values of type ['a] and vice versa. *)
 
 
 val value_kind : 'a t -> string
@@ -404,7 +406,7 @@ val value_kind : 'a t -> string
     by [t]. *)
 
 val kind : 'a t -> string
-(** [kind t] is the [kind] of the underlying map. *)
+(** [kind t] is the [kind] of the underlying map. FIXME explain difference. *)
 
 val doc : 'a t -> string
 (** [doc t] is a documentation string for the JSON values typed by [t]. *)
@@ -418,8 +420,8 @@ module Base : sig
   (** The type for mapping values of type ['a] to values of type ['b]. *)
 
   val map :
-    ?kind:string -> ?doc:string -> ?dec:(Context.t -> Meta.t -> 'a -> 'b) ->
-    ?enc:(Context.t -> 'b -> 'a) -> ?enc_meta:(Context.t -> 'b -> Meta.t) ->
+    ?kind:string -> ?doc:string -> ?dec:(Meta.t -> 'a -> 'b) ->
+    ?enc:('b -> 'a) -> ?enc_meta:('b -> Meta.t) ->
     unit -> ('a, 'b) map
   (** [map ~kind ~doc ~dec ~enc ~enc_meta ()] maps JSON base types
       represented by value of type ['a] to values of type ['b] with:
@@ -476,31 +478,31 @@ module Base : sig
       These function create suitable [dec] and [enc] functions
       to give to {!map} from standard OCaml conversion interfaces. *)
 
-  val dec : ('a -> 'b) -> (Context.t -> Meta.t -> 'a -> 'b)
+  val dec : ('a -> 'b) -> (Meta.t -> 'a -> 'b)
   (** [dec f] is a decoding function from [f]. This assumes [f] never fails. *)
 
   val dec_result :
     ?kind:string -> ('a -> ('b, string) result) ->
-    (Context.t -> Meta.t -> 'a -> 'b)
+    (Meta.t -> 'a -> 'b)
   (** [dec f] is a decoding function from [f]. [Error _] values are given to
       {!Error.msg}, prefixed by [kind:] (if specified). *)
 
   val dec_failure :
-    ?kind:string -> ('a -> 'b) -> (Context.t -> Meta.t -> 'a -> 'b)
+    ?kind:string -> ('a -> 'b) -> (Meta.t -> 'a -> 'b)
   (** [dec f] is a decoding function from [f]. [Failure _] exceptions
       are catched and given to {!Error.msg}, prefixed by [kind:] (if
       specified). *)
 
-  val enc : ('b -> 'a) -> (Context.t -> 'b -> 'a)
+  val enc : ('b -> 'a) -> ('b -> 'a)
   (** [enc f] is an encoding function from [f]. This assumes [f] never fails. *)
 
   val enc_result :
-    ?kind:string -> ('b -> ('a, string) result) -> (Context.t -> 'b -> 'a)
+    ?kind:string -> ('b -> ('a, string) result) -> ('b -> 'a)
   (** [enc_result f] is an encoding function from [f]. [Error _] values are
       given to {!Error.msg}, prefixed by [kind:] (if specified) *)
 
   val enc_failure :
-    ?kind:string -> ('b -> 'a) -> (Context.t -> 'b -> 'a)
+    ?kind:string -> ('b -> 'a) -> ('b -> 'a)
   (** [enc_failure f] is an encoding function from [f]. [Failure _]
       exceptions are catched and given to {!Error.msg}, prefixed by [kind:]
       (if specified). *)
@@ -512,8 +514,7 @@ module Array : sig
   (** {1:maps Maps} *)
 
   type ('array, 'elt) enc =
-    { enc : 'acc. Context.t -> ('acc -> int -> 'elt -> 'acc) -> 'acc ->
-       'array -> 'acc }
+    { enc : 'acc. ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc }
   (** The type for specifying array encoding functions. A function to fold
       over the elements of type ['elt] of the array of type ['array]. *)
 
@@ -523,12 +524,12 @@ module Array : sig
 
   val map :
     ?kind:string -> ?doc:string ->
-    dec_empty:(Context.t -> 'builder) ->
-    ?dec_skip:(Context.t -> int -> 'builder -> bool) ->
-    dec_add:(Context.t -> int -> 'elt -> 'builder -> 'builder) ->
-    dec_finish:(Context.t -> Meta.t -> int -> 'builder -> 'array) ->
+    dec_empty:(unit -> 'builder) ->
+    ?dec_skip:(int -> 'builder -> bool) ->
+    dec_add:(int -> 'elt -> 'builder -> 'builder) ->
+    dec_finish:(Meta.t -> int -> 'builder -> 'array) ->
     enc:('array, 'elt) enc ->
-    ?enc_meta:(Context.t -> 'array -> Meta.t) -> 'elt t ->
+    ?enc_meta:('array -> Meta.t) -> 'elt t ->
     ('array, 'elt, 'builder) map
   (** [map elt] maps JSON arrays of type ['elt] to arrays of
       type ['array] built with type ['builder].
@@ -550,7 +551,7 @@ module Array : sig
 
   val list_map :
     ?kind:string -> ?doc:string ->
-    ?dec_skip:(Context.t -> int -> 'a list -> bool) -> 'a t ->
+    ?dec_skip:(int -> 'a list -> bool) -> 'a t ->
     ('a list, 'a, 'a list) map
   (** [list_map elt] maps JSON arrays with elements of type [elt]
       to [list] values. See also {!Jsont.list}. *)
@@ -560,7 +561,7 @@ module Array : sig
 
   val array_map :
     ?kind:string -> ?doc:string ->
-    ?dec_skip:(Context.t -> int -> 'a array_builder -> bool) -> 'a t ->
+    ?dec_skip:(int -> 'a array_builder -> bool) -> 'a t ->
     ('a array, 'a, 'a array_builder) map
   (** [array_map elt] maps JSON arrays with elements of type [elt]
       to [array] values. See also {!Jsont.array}. *)
@@ -570,7 +571,7 @@ module Array : sig
 
   val bigarray_map :
     ?kind:string -> ?doc:string ->
-    ?dec_skip:(Context.t -> int -> ('a, 'b, 'c) bigarray_builder -> bool) ->
+    ?dec_skip:(int -> ('a, 'b, 'c) bigarray_builder -> bool) ->
     ('a, 'b) Bigarray.kind -> 'c Bigarray.layout -> 'a t ->
     (('a, 'b, 'c) Bigarray.Array1.t, 'a, ('a, 'b, 'c) bigarray_builder) map
   (** [bigarray k l elt] maps JSON arrays with elements of
@@ -612,14 +613,14 @@ module Obj : sig
          if the result is only used for encoding.}} *)
 
   val map' :
-    ?kind:string -> ?doc:string -> ?enc_meta:(Context.t -> 'o -> Meta.t) ->
-    (Context.t -> Meta.t -> 'dec) -> ('o, 'dec) map
-  (** [map' dec] is like {!val-map} except you get the full decoding
+    ?kind:string -> ?doc:string -> ?enc_meta:('o -> Meta.t) ->
+    (Meta.t -> 'dec) -> ('o, 'dec) map
+  (** [map' dec] is like {!val-map} except you get the meta
       context in [dec] and [enc_meta] is used to recover it on encoding. *)
 
   val enc_only :
-    ?kind:string -> ?doc:string -> ?enc_meta:(Context.t -> 'o -> Meta.t) ->
-    unit -> ('o, 'a) map
+    ?kind:string -> ?doc:string -> ?enc_meta:('o -> Meta.t) -> unit ->
+    ('o, 'a) map
   (** [enc_only ()] is like {!val-map'} but can only be used for
       encoding. *)
 
@@ -790,15 +791,15 @@ module Obj : sig
 
     type ('mems, 'a) enc =
       { enc :
-          'acc. Context.t -> (Meta.t -> string -> 'a -> 'acc -> 'acc) ->
+          'acc. (Meta.t -> string -> 'a -> 'acc -> 'acc) ->
           'mems -> 'acc -> 'acc }
     (** The type for specifying unknown member folds. *)
 
     val map :
       ?kind:string -> ?doc:string -> 'a jsont ->
-      dec_empty:(Context.t -> 'builder) ->
-      dec_add:(Context.t -> Meta.t -> string -> 'a -> 'builder -> 'builder) ->
-      dec_finish:(Context.t -> 'builder -> 'mems) ->
+      dec_empty:(unit -> 'builder) ->
+      dec_add:(Meta.t -> string -> 'a -> 'builder -> 'builder) ->
+      dec_finish:('builder -> 'mems) ->
       enc:('mems, 'a) enc -> ('mems, 'a, 'builder) map
       (** [map type' ~empty ~add ~fold] defines a structure of type
           ['mems] to hold unknown members with values of type
@@ -844,7 +845,7 @@ end
 val any :
   ?kind:string -> ?doc:string -> ?dec_null:'a t -> ?dec_bool:'a t ->
   ?dec_number:'a t -> ?dec_string:'a t -> ?dec_array:'a t ->
-  ?dec_obj:'a t -> ?enc:(Context.t -> 'a -> 'a t) -> unit -> 'a t
+  ?dec_obj:'a t -> ?enc:('a -> 'a t) -> unit -> 'a t
 (** [any ()] maps subsets of JSON value of different sorts to values
     of type ['a]. The unspecified cases are not part of the subset and
     error on decoding. [enc] selects the type on encoding and errors
@@ -852,8 +853,8 @@ val any :
     a documentation string. *)
 
 val map :
-  ?kind:string -> ?doc:string -> ?dec:(Context.t -> 'a -> 'b) ->
-  ?enc:(Context.t -> 'b -> 'a) -> 'a t -> 'b t
+  ?kind:string -> ?doc:string -> ?dec:('a -> 'b) ->
+  ?enc:('b -> 'a) -> 'a t -> 'b t
 (** [map t] changes the type of [t] from ['a] to ['b].
     {ul
     {- [kind] names the entities represented by type ['b].
@@ -1082,16 +1083,6 @@ val tn : ?kind:string -> ?doc:string -> n:int -> 'a t -> 'a array t
 (** [tn ~n t] maps JSON arrays of exactly [n] elements of type [t] to
     [array] values. This is {!val-array} limited by [n]. *)
 
-(** {2:context Context} *)
-
-val context : Context.t t
-(** [context] maps any JSON to its decoding context and errors on encoding. *)
-
-val with_context : 'a t -> ('a * Context.t) t
-(** [with_context t] maps JSON like [t] does but on decodes returns
-    the context in which [t] is used. On encodes the context is
-    ignored and dropped. *)
-
 (** {1:generic_json Generic JSON} *)
 
 type name = string node
@@ -1207,21 +1198,21 @@ module Json : sig
 
   (** {1:converting Converting} *)
 
-  val decode : ?ctx:Context.t -> 'a t -> json -> ('a, string) result
+  val decode : 'a t -> json -> ('a, string) result
   (** [dcode t j] decodes a value from the generic JSON [j] according
-      to type [t]. [ctx] defaults to {!Context.root}. *)
+      to type [t]. *)
 
-  val decode' : ?ctx:Context.t -> 'a t -> json -> ('a, Error.t) result
+  val decode' : 'a t -> json -> ('a, Error.t) result
   (** [decode'] is like {!decode} but preserves the error structure. *)
 
-  val encode : ?ctx:Context.t -> 'a t -> 'a -> (json, string) result
+  val encode : 'a t -> 'a -> (json, string) result
   (** [encode t v] encodes a generic JSON value for [v] according
       to type [t]. [ctx] default to {!Contet.root}. *)
 
-  val encode' : ?ctx:Context.t -> 'a t -> 'a -> (json, Error.t) result
+  val encode' : 'a t -> 'a -> (json, Error.t) result
   (** [encode'] is like {!encode} but preserves the error structure. *)
 
-  (*
+  (* TODO
   (** {1:errors Errors} *)
 
   val error_sort : Context.t -> exp:Sort.t -> json -> 'a
@@ -1293,7 +1284,7 @@ val const : 'a t -> 'a -> 'a t
 (** [const t v] maps any JSON value to [v] on decodes and
     unconditionally encodes [v] with [t]. *)
 
-val recode : dec:'a t -> (Context.t -> 'a -> 'b) -> enc:'b t -> 'b t
+val recode : dec:'a t -> ('a -> 'b) -> enc:'b t -> 'b t
 (** [recode ~dec f ~enc] maps on decodes like [dec] does followed by
     [f] and on encodes uses [enc]. This can be used to change the JSON
     sort of value. For example:
@@ -1337,13 +1328,12 @@ val delete_nth : ?allow_absent:bool -> int -> json t
     there is no such index unless [~allow_absent:true] is specified in
     which case the data is left untouched. *)
 
-val filter_map_array :
-  'a t -> 'b t -> (Context.t -> int -> 'a -> 'b option) -> json t
+val filter_map_array : 'a t -> 'b t -> (int -> 'a -> 'b option) -> json t
 (** [filter_map_array a b f] maps the [a] elements of a JSON array
     with [f] to [b] elements or deletes them on [None]. Encodes
     generic JSON arrays like {!json_array} does. *)
 
-val fold_array : 'a t -> (Context.t -> int -> 'a -> 'b -> 'b) -> 'b -> 'b t
+val fold_array : 'a t -> (int -> 'a -> 'b -> 'b) -> 'b -> 'b t
 (** [fold_array t f acc] fold [f] over the [t] elements of a JSON
     array starting with [acc]. Encodes an empty JSON array. *)
 
@@ -1376,14 +1366,12 @@ val delete_mem : ?allow_absent:bool -> string -> json t
     in which case the data is left untouched. Encodes generic JSON
     objects like {!json_obj} does. *)
 
-val fold_obj :
-  'a t -> (Context.t -> Meta.t -> string -> 'a -> 'b -> 'b) -> 'b -> 'b t
+val fold_obj : 'a t -> (Meta.t -> string -> 'a -> 'b -> 'b) -> 'b -> 'b t
 (** [fold_obj t f acc] folds [f] over the [t] members of a JSON object
     starting with [acc]. Encodes an empty JSON object. *)
 
 val filter_map_obj :
-  'a t -> 'b t ->
-  (Context.t -> Meta.t -> string -> 'a -> (string * 'b) option) -> json t
+  'a t -> 'b t -> (Meta.t -> string -> 'a -> (string * 'b) option) -> json t
 (** [filter_map_obj a b f] maps the [a] members of a JSON object with
     [f] to [(n, b)] members or deletes them on [None]. Encodes generic
     JSON arrays like {!json_obj} does. *)
@@ -1611,13 +1599,13 @@ module Repr : sig
     (** The kind of JSON value that are mapped (documentation) *)
     doc : string;
     (** A doc string for the kind of JSON value. *)
-    dec : Context.t -> Meta.t -> 'a -> 'b;
+    dec : Meta.t -> 'a -> 'b;
     (** [dec] decodes a base value represented by its metadata and ['a] to
         ['b]. *)
-    enc : Context.t -> 'b -> 'a;
+    enc : 'b -> 'a;
     (** [enc] encodes a value of type ['b] to a base JSON value represented
         by ['a]. *)
-    enc_meta : Context.t -> 'b -> Meta.t;
+    enc_meta : 'b -> Meta.t;
     (** [enc_meta] recovers the base JSON value metadata from ['b] (if any). *)
   }
   (** The type for mapping JSON base values represented in OCaml by
@@ -1647,22 +1635,20 @@ module Repr : sig
     (** Documentation string for the JSON array. *)
     elt : 'elt t;
     (** The type for the array elements. *)
-    dec_empty : Context.t -> 'builder;
-    (** [dec_empty ctx] creates a new empty array builder. *)
-    dec_skip : Context.t -> int -> 'builder -> bool;
-    (** [dec_skip ctx i b] determines if the [i]th index of the JSON
-        array can be skipped. *)
-    dec_add : Context.t -> int -> 'elt -> 'builder -> 'builder;
+    dec_empty : unit -> 'builder;
+    (** [dec_empty ()] creates a new empty array builder. *)
+    dec_skip : int -> 'builder -> bool;
+    (** [dec_skip i b] determines if the [i]th index of the JSON array can be
+        skipped. *)
+    dec_add : int -> 'elt -> 'builder -> 'builder;
     (** [dec_add] adds the [i]th index value of the JSON array
         as decoded by [elt] to the builder. *)
-    dec_finish : Context.t -> Meta.t -> int -> 'builder -> 'array;
+    dec_finish : Meta.t -> int -> 'builder -> 'array;
     (** [dec_finish] turns the builder into an array given its
         metadata and length. *)
-    enc :
-      'acc. Context.t -> ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array ->
-      'acc;
+    enc : 'acc. ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc;
     (** [enc] folds over the elements of the array for encoding. *)
-    enc_meta : Context.t -> 'array -> Meta.t;
+    enc_meta : 'array -> Meta.t;
     (** [enc_meta] recovers the metadata of an array (if any). *) }
   (** The type for mapping JSON arrays to values of type ['array]
       with array elements mapped to type ['elt] and using a ['builder]
@@ -1684,7 +1670,7 @@ module Repr : sig
     (** [mem_decs] are the member decoders sorted by member name. *)
     mem_encs : 'o mem_enc list;
     (** [mem_encs] is the list of member encoders. *)
-    enc_meta : Context.t -> 'o -> Meta.t;
+    enc_meta : 'o -> Meta.t;
     (** [enc_meta] recovers the metadata of an object (if any). *)
     shape : 'o obj_shape;
     (** [shape] is the {{!obj_shape}shape} of the object. *) }
@@ -1712,10 +1698,10 @@ module Repr : sig
         to the object decoding function of the object map. *)
     dec_absent : 'a option;
     (** The value to use if absent (if any). *)
-    enc : Context.t -> 'o -> 'a;
+    enc : 'o -> 'a;
     (** [enc] recovers the value to encode from ['o]. *)
-    enc_meta : Context.t -> 'a -> Meta.t; (* FIXME *)
-    enc_omit : Context.t -> 'a -> bool;
+    enc_meta : 'a -> Meta.t; (* FIXME *)
+    enc_omit : 'a -> bool;
     (** [enc_omit] is [true] if the result of [enc] should
         not be encoded. *)
   }
@@ -1753,16 +1739,15 @@ module Repr : sig
                           are typed. *)
     id : 'mems Type.Id.t; (** A type identifier for the unknown member
                               map. *)
-    dec_empty : Context.t -> 'builder;
+    dec_empty : unit -> 'builder;
     (** [dec_empty] create a new empty member map builder. *)
-    dec_add : Context.t -> Meta.t -> string -> 'a -> 'builder -> 'builder;
+    dec_add : Meta.t -> string -> 'a -> 'builder -> 'builder;
     (** [dec_add] adds a member named [n] with metadata [meta] and
         value parsed by [mems_type] to the builder. *)
-    dec_finish : Context.t -> 'builder -> 'mems;
+    dec_finish : 'builder -> 'mems;
     (** [dec_finish] turns the builder into an unknown member map. *)
     enc :
-      'acc. Context.t ->
-      (Meta.t -> string -> 'a -> 'acc -> 'acc) -> 'mems -> 'acc -> 'acc;
+      'acc. (Meta.t -> string -> 'a -> 'acc -> 'acc) -> 'mems -> 'acc -> 'acc;
     (** [enc] folds over the member map for encoding. *)
   }
   (** The type for gathering unknown JSON members uniformly typed
@@ -1788,7 +1773,7 @@ module Repr : sig
     enc : 'o -> 'cases;
     (** [enc] is the function to recover case values from the value
         ['o] the object is mapped to. *)
-    enc_case : Context.t -> 'cases -> ('cases, 'tag) case_value;
+    enc_case : 'cases -> ('cases, 'tag) case_value;
     (** [enc_case] retrieves the concrete case from the common
         [cases] values. You can see it as preforming a match. *)
   }
@@ -1836,7 +1821,7 @@ module Repr : sig
     (** [dec_array], if any, is used for decoding JSON arrays. *)
     dec_obj : 'a t option;
     (** [dec_obj], if any, is used for decoding JSON objects. *)
-    enc : Context.t -> 'a -> 'a t;
+    enc : 'a -> 'a t;
     (** [enc] specifies the encoder to use on a given value. *)
   }
   (** The type for mapping JSON values with multiple sorts to a value
@@ -1852,9 +1837,9 @@ module Repr : sig
     (** Documentation string for the kind of values. *)
     dom : 'a t;
     (** The domain of the map. *)
-    dec : Context.t -> 'a -> 'b;
+    dec : 'a -> 'b;
     (** [dec] decodes ['a] to ['b]. *)
-    enc : Context.t -> 'b -> 'a;
+    enc : 'b -> 'a;
     (** [enc] encodes ['b] to ['a]. *) }
   (** The type for mapping JSON types of type ['a] to a JSON type of
       type ['b]. *)
@@ -1874,18 +1859,17 @@ module Repr : sig
   val value_kind : 'a t -> string
   (** [value_kind m] is the kind of definition of [m]. *)
 
-  val sort_kind : kind:string -> sort:string -> string
+  val sort_kind' : kind:string -> sort:string -> string
+  val sort_kind : kind:string -> sort:Sort.t -> string
 
   val array_kind : kind:string -> 'a t -> string
   (** [array_kind ~kind elt] is an array of kind [kind] for
       an array with element of type [elt]. *)
 
-  val obj_kind : kind:string -> string
-
-  val obj_map_kind : ('o, 'dec) obj_map  -> string
+  val obj_map_value_kind : ('o, 'dec) obj_map  -> string
   (** [obj_map_kind m] is the kind of definition of [m]. *)
 
-  val type_error : Context.t -> Meta.t -> 'a t -> fnd:Sort.t -> 'b
+  val type_error : Meta.t -> 'a t -> fnd:Sort.t -> 'b
   (** [error_kind p m ~exp ~fnd] errors when kind [exp] was expected
       but sort [fnd] was found. See also {!Jsont.Repr.type_error}. *)
 
@@ -1893,7 +1877,7 @@ module Repr : sig
       from [t]. *)
 
   val missing_mems_error :
-    Context.t -> Meta.t -> ('o, 'o) obj_map -> exp:mem_dec String_map.t ->
+    Meta.t -> ('o, 'o) obj_map -> exp:mem_dec String_map.t ->
     fnd:string list -> 'a
   (** [missing_mems_error] is like {!Error.missing_mems} but with
       information derived from the given argument map descriptions. In
@@ -1901,13 +1885,13 @@ module Repr : sig
       are reported. *)
 
   val unexpected_mems_error :
-    Context.t -> Meta.t -> ('o, 'o) obj_map -> fnd:(string * Meta.t) list -> 'a
+    Meta.t -> ('o, 'o) obj_map -> fnd:(string * Meta.t) list -> 'a
   (** [unexpected_mems ctx m ~obj_kind ~exp fnd] errors when member name
       [n] is found in an object but is not expected. TODO what does
       meta represent. *)
 
   val unexpected_case_tag_error :
-    Context.t -> Meta.t -> ('o, 'o) obj_map -> ('o, 'd, 'tag) obj_cases ->
+    Meta.t -> ('o, 'o) obj_map -> ('o, 'd, 'tag) obj_cases ->
     'tag -> 'a
 
   (** {1:context Context}
@@ -1916,15 +1900,11 @@ module Repr : sig
       extract information from the given object to enrich the context
       at some point. *)
 
-  val push_mem :
-    ('o, 'dec) obj_map -> string -> Meta.t -> Context.t -> Context.t
+  val error_push_object :
+    Meta.t -> ('o, 'dec) obj_map -> string node -> Error.t -> 'a
 
-  val push_mem' :
-    ('o, 'dec) obj_map -> string * Meta.t -> Context.t -> Context.t
-
-  val push_nth :
-    ('array, 'elt, 'builder) array_map -> int -> Meta.t ->
-    Context.t -> Context.t
+  val error_push_array :
+    Meta.t -> ('array, 'elt, 'builder) array_map -> int node -> Error.t -> 'a
 
   (** {1:tool Toolbox} *)
 
@@ -1941,9 +1921,7 @@ module Repr : sig
 
   val apply_dict : ('ret, 'f) dec_fun -> Dict.t -> 'f
 
-  val obj_context_arg : Context.t Type.Id.t
   val obj_meta_arg : Meta.t Type.Id.t
-
   val pp_code : string fmt
   val pp_kind : string fmt
 
@@ -1952,6 +1930,10 @@ module Repr : sig
       ('o, 'mems, 'builder) unknown_mems option -> unknown_mems_option
 
   val override_unknown_mems :
-    Context.t -> by:unknown_mems_option -> unknown_mems_option ->
+    by:unknown_mems_option -> unknown_mems_option ->
     Dict.t -> unknown_mems_option * Dict.t
+
+  val finish_object_decode :
+    ('o, 'o) obj_map -> Meta.t -> ('p, 'mems, 'builder) unknown_mems ->
+    'builder -> mem_dec String_map.t -> Dict.t -> Dict.t
 end

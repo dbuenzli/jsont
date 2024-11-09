@@ -7,7 +7,7 @@
 
 let string_null_is_empty =
   let null = Jsont.null "" in
-  let enc _ctx = function "" -> null | _ -> Jsont.string in
+  let enc = function "" -> null | _ -> Jsont.string in
   Jsont.any ~dec_null:null ~dec_string:Jsont.string ~enc ()
 
 (* Objects as records *)

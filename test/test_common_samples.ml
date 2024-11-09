@@ -334,7 +334,7 @@ module Tree = struct
         |> Jsont.Obj.mem ~enc:right "right" (Jsont.rec' tree)
         |> Jsont.Obj.finish
       in
-      let enc _ = function Empty -> empty | Node _ -> node in
+      let enc = function Empty -> empty | Node _ -> node in
       Jsont.any ~kind:"tree" ~dec_null:empty ~dec_obj:node ~enc ()
     end
     in

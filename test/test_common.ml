@@ -466,8 +466,7 @@ let test_const () =
   encode_ok Jsont.(const bool true) ~value:false "true" ~__POS__;
   ()
 
-let int_to_string =
-  Jsont.(recode ~dec:int (fun ctx i -> string_of_int i) ~enc:string)
+let int_to_string = Jsont.(recode ~dec:int string_of_int ~enc:string)
 
 let test_array_queries () =
   let a = "[1,[1,2],3]" in
@@ -489,10 +488,10 @@ let test_array_queries () =
     a "[1,[1,2,null,4],3]" ~__POS__; *)
   update Jsont.(update_nth 1 @@ delete_nth 0) a "[1,[2],3]" ~__POS__;
   decode_ok
-    Jsont.(nth 1 @@ fold_array int (fun _ i v acc -> (i, v) :: acc) [])
+    Jsont.(nth 1 @@ fold_array int (fun i v acc -> (i, v) :: acc) [])
     a ~value:[(1,2); (0,1)] ~__POS__;
   update Jsont.(update_nth 1 @@ filter_map_array int int
-                     (fun _ _ v -> if v mod 2 = 0 then None else Some (v - 1)))
+                     (fun _ v -> if v mod 2 = 0 then None else Some (v - 1)))
     a "[1,[0],3]" ~__POS__;
   ()
 
@@ -515,11 +514,11 @@ let test_object_queries () =
     o {|{"a":{"b":1},"c":2}|} ~__POS__;
   update Jsont.(update_mem "a" @@ delete_mem "b")
     o {|{"a":{},"c":2}|} ~__POS__;
-  decode_ok Jsont.(mem "a" @@ fold_obj int (fun _ _ n v acc -> (n,v) :: acc) [])
+  decode_ok Jsont.(mem "a" @@ fold_obj int (fun _ n v acc -> (n,v) :: acc) [])
     o' ~value:["c", 1; "b", 0] ~__POS__;
   update Jsont.(update_mem "a" @@
                    filter_map_obj int int
-                     (fun _ _ n v -> if n = "b"
+                     (fun _ n v -> if n = "b"
                        then None else Some (n ^ n, v + 1)))
     o' {|{"a":{"cc":2}}|} ~__POS__;
   ()

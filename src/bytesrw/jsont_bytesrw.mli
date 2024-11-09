@@ -8,50 +8,50 @@
     According to {{:https://www.rfc-editor.org/rfc/rfc8259}RFC 8259}.
 
     See notes about {{!layout}layout preservation} and behaviour
-    on {{!duplicate}duplicate members}. *)
+    on {{!duplicate}duplicate members}.
+
+    {b Tip.} For maximal performance decode with [~layout:false] and
+    [~locs:false], this is the default. Howver using [~locs:true] allows
+    for well located error reports. *)
 
 open Bytesrw
 
 (** {1:decode Decode} *)
 
 val decode :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> 'a Jsont.t -> Bytes.Reader.t ->
-  ('a, string) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
+  Bytes.Reader.t -> ('a, string) result
 (** [decode t r] decodes a value from [r] according to [t].
     {ul
     {- If [layout] is [true] whitespace is preserved in Jsonit.Json.Meta.t
        values. Defaults to [false].}
     {- If [locs] is [true] locations are preserved in Jsonit.Json.Meta.t
-       values. Defaults to [false].}
+       values and error messages are precisely located. Defaults to [false].}
     {- [file] is the file path from which [r] is assumed to read
        (defaults to {!Jsont.Textloc.file_none}) used in the
        text locations if [locs] is [true].}} *)
 
 val decode' :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> 'a Jsont.t -> Bytes.Reader.t ->
-  ('a, Jsont.Error.t) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
+  Bytes.Reader.t -> ('a, Jsont.Error.t) result
 (** [decode'] is like {!val-decode} but preserves the
     error structure. *)
 
 val decode_string :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> 'a Jsont.t -> string -> ('a, string) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
+  string -> ('a, string) result
 (** [decode_string] is like {!decode'} but decodes directly from a string. *)
 
 val decode_string' :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> 'a Jsont.t -> string ->
-  ('a, Jsont.Error.t) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
+  string -> ('a, Jsont.Error.t) result
 (** [decode_string'] is like {!decode'} but decodes directly from a string. *)
 
 (** {1:encode Encode} *)
 
 val encode :
-  ?buf:Bytes.t -> ?ctx:Jsont.Context.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> 'a -> eod:bool ->
-  Bytes.Writer.t -> (unit, string) result
+  ?buf:Bytes.t -> ?format:Jsont.format -> ?number_format:Jsont.number_format ->
+  'a Jsont.t -> 'a -> eod:bool -> Bytes.Writer.t -> (unit, string) result
 (** [encode t v w] encodes value [v] according to [t] on [w].
     {ul
     {- If [buf] is specified it is used as a buffer for the slices written
@@ -64,21 +64,18 @@ val encode :
        be written on [w].}} *)
 
 val encode' :
-  ?buf:Bytes.t -> ?ctx:Jsont.Context.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> 'a -> eod:bool ->
-  Bytes.Writer.t -> (unit, Jsont.Error.t) result
+  ?buf:Bytes.t -> ?format:Jsont.format -> ?number_format:Jsont.number_format ->
+  'a Jsont.t -> 'a -> eod:bool -> Bytes.Writer.t -> (unit, Jsont.Error.t) result
 (** [encode'] is like {!val-encode} but preserves the error structure. *)
 
 val encode_string :
-  ?buf:Bytes.t -> ?ctx:Jsont.Context.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> 'a ->
-  (string, string) result
+  ?buf:Bytes.t -> ?format:Jsont.format -> ?number_format:Jsont.number_format ->
+  'a Jsont.t -> 'a -> (string, string) result
 (** [encode_string] is like {!val-encode} but writes to a string. *)
 
 val encode_string' :
-  ?buf:Bytes.t -> ?ctx:Jsont.Context.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> 'a ->
-  (string, Jsont.Error.t) result
+  ?buf:Bytes.t -> ?format:Jsont.format -> ?number_format:Jsont.number_format ->
+  'a Jsont.t -> 'a -> (string, Jsont.Error.t) result
 (** [encode_string'] is like {!val-encode'} but writes to a string. *)
 
 (** {1:recode Recode}
@@ -88,31 +85,27 @@ val encode_string' :
     [Jsont.Layout] and vice-versa.  *)
 
 val recode :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> Bytes.Reader.t ->
-  Bytes.Writer.t -> eod:bool -> (unit, string) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t ->
+  ?format:Jsont.format -> ?number_format:Jsont.number_format -> 'a Jsont.t ->
+  Bytes.Reader.t -> Bytes.Writer.t -> eod:bool -> (unit, string) result
 (** [recode] is {!decode} followed by {!recode}.  *)
 
 val recode' :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> Bytes.Reader.t ->
-  Bytes.Writer.t -> eod:bool -> (unit, Jsont.Error.t) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t ->
+  ?format:Jsont.format -> ?number_format:Jsont.number_format -> 'a Jsont.t ->
+  Bytes.Reader.t -> Bytes.Writer.t -> eod:bool -> (unit, Jsont.Error.t) result
 (** [recode'] is like {!val-recode} but preserves the error structure. *)
 
 val recode_string :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> string ->
-  (string, string) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t ->
+  ?format:Jsont.format -> ?number_format:Jsont.number_format -> 'a Jsont.t ->
+  string -> (string, string) result
 (** [recode] is {!decode_string} followed by {!recode_string}. *)
 
 val recode_string' :
-  ?ctx:Jsont.Context.t -> ?layout:bool -> ?locs:bool ->
-  ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t -> ?format:Jsont.format ->
-  ?number_format:Jsont.number_format -> 'a Jsont.t -> string ->
-  (string, Jsont.Error.t) result
+  ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t ->
+  ?format:Jsont.format -> ?number_format:Jsont.number_format -> 'a Jsont.t ->
+  string -> (string, Jsont.Error.t) result
 (** [recode_string'] is like {!val-recode_string} but preserves the error
     structure. *)
 

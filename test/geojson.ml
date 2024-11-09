@@ -144,7 +144,7 @@ module Geojson = struct
       let enc = Jsont.Base.enc (function `String n -> n | _ -> assert false) in
       Jsont.Base.string (Jsont.Base.map ~enc ~dec ())
     in
-    let enc _ = function `Number _ -> number | `String _ -> string in
+    let enc = function `Number _ -> number | `String _ -> string in
     Jsont.any ~kind:"id" ~dec_number:number ~dec_string:string ~enc ()
 
   (* The first two Json types below handle subtyping by redoing
