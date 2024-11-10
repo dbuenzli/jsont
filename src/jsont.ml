@@ -460,6 +460,7 @@ module Repr = struct (* See the .mli for documentation *)
     mem_dec String_map.t -> Dict.t -> Dict.t
     =
     fun map meta umems umap mem_decs dict ->
+    let dict = Dict.add object_meta_arg meta dict in
     let dict = match umems with
     | Unknown_skip | Unknown_error -> dict
     | Unknown_keep (map, _) -> Dict.add map.id (map.dec_finish umap) dict
@@ -1364,7 +1365,7 @@ module Json = struct
     let u _ _ _ = assert false in
     let mem_miss = String_map.union u mem_miss map.mem_decs in
     let mem_decs = String_map.union u mem_decs map.mem_decs in
-    let dict = match map.shape with
+    match map.shape with
     | Object_cases (umems', cases) ->
         let umems' = Unknown_mems umems' in
         let umems, dict = Repr.override_unknown_mems ~by:umems umems' dict in
@@ -1381,8 +1382,6 @@ module Json = struct
         | Unknown_mems (Some (Unknown_keep (umap, _) as umems)) ->
             let umap = umap.dec_empty () in
             decode_object_basic map meta umems umap mem_miss mem_decs dict mems
-    in
-    Dict.add object_meta_arg meta dict
 
   and decode_object_basic : type o p m b.
     (o, o) object_map -> Meta.t -> (p, m, b) unknown_mems -> b ->

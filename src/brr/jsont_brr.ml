@@ -120,10 +120,10 @@ fun map jv ->
 
 and decode_object : type o. (o, o) object_map -> Jv.t -> o =
 fun map jv ->
-  let dict = Dict.add Jsont.Repr.object_meta_arg Jsont.Meta.none Dict.empty in
   let names = jv_mem_name_map jv in
-  apply_dict map.dec
-    (decode_object_map map (Unknown_mems None) String_map.empty dict names jv)
+  let umems = Unknown_mems None in
+  let dict = decode_object_map map umems String_map.empty Dict.empty names jv in
+  apply_dict map.dec dict
 
 and decode_object_map : type o.
   (o, o) object_map -> unknown_mems_option -> mem_dec String_map.t -> Dict.t ->

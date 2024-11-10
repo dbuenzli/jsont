@@ -9,10 +9,13 @@ open Jsont.Repr
 (* XXX add these things to Stdlib.Uchar *)
 
 let uchar_max_utf_8_byte_length = 4
-let uchar_utf_8_byte_decode_length byte = (* or utf_8_byte_length_of_byte *)
-  if byte < 0x80 then 1 else if byte < 0xC2 then 0 else
-  if byte < 0xE0 then 2 else if byte < 0xF0 then 3 else
-  if byte < 0xF5 then 4 else 0
+let[@inline] uchar_utf_8_byte_decode_length b = match Char.unsafe_chr b with
+| '\x00' .. '\x7F' -> 1
+| '\x80' .. '\xC1' -> 0
+| '\xC2' .. '\xDF' -> 2
+| '\xE0' .. '\xEF' -> 3
+| '\xF0' .. '\xF4' -> 4
+| _ -> 0
 
 (* Character classes *)
 
@@ -210,7 +213,7 @@ let[@inline] available d = d.i_max - d.i_next + 1
 let[@inline] next_utf_8_length d =
   uchar_utf_8_byte_decode_length (Stdlib.Bytes.get_uint8 d.i d.i_next)
 
-let set_slice d slice =
+let[@inline] set_slice d slice =
   d.i <- Bytes.Slice.bytes slice;
   d.i_next <- Bytes.Slice.first slice;
   d.i_max <- d.i_next + Bytes.Slice.length slice - 1
@@ -272,9 +275,6 @@ let[@inline] ws_clear d = if d.layout then Buffer.clear d.ws
 let[@inline] ws_pop d =
   if d.layout then (let t = Buffer.contents d.ws in ws_clear d; t) else ""
 
-let[@inline] ws_add d = (* assert d.u is an ASCII char *)
-  if d.layout then (Buffer.add_char d.ws (Char.unsafe_chr d.u))
-
 let[@inline] token_clear d = Buffer.clear d.token
 let[@inline] token_pop d = let t = Buffer.contents d.token in (token_clear d; t)
 let[@inline] token_add d u =
@@ -310,10 +310,16 @@ let true_uchars  = [| 0x0074; 0x0072; 0x0075; 0x0065 |]
 let null_uchars  = [| 0x006E; 0x0075; 0x006C; 0x006C |]
 let ascii_str us = String.init (Array.length us) (fun i -> Char.chr us.(i))
 
-let rec read_ws d = match d.u with
-| 0x0020 (* SP  *) | 0x0009 (* TAB *) | 0x000A (* LF *) | 0x000D (* CR *) ->
-    ws_add d; nextc d; read_ws d
-| _ -> ()
+let[@inline] is_ws u =
+  if u > 0x20 then false else match Char.unsafe_chr u with
+  | ' ' | '\t' | '\r' | '\n' -> true
+  | _ -> false
+
+let[@inline] read_ws d =
+  while is_ws d.u do
+    if d.layout then (Buffer.add_char d.ws (Char.unsafe_chr d.u));
+    nextc d
+  done
 
 let read_json_const d const = (* First character was checked. *)
   let ws_before = ws_pop d in
@@ -328,25 +334,23 @@ let read_json_const d const = (* First character was checked. *)
   let textloc = textloc_to_current d ~first_byte ~first_line in
   meta_make d ~ws_before ~ws_after textloc
 
-let read_json_false d = read_json_const d false_uchars
-let read_json_true d = read_json_const d true_uchars
-let read_json_null d = read_json_const d null_uchars
+let[@inline] read_json_false d = read_json_const d false_uchars
+let[@inline] read_json_true d = read_json_const d true_uchars
+let[@inline] read_json_null d = read_json_const d null_uchars
 let read_json_number d = (* [is_number_start d.u] = true *)
-  let rec read_digits d =
-    if is_digit d.u then (accept d; read_digits d) else ()
-  in
-  let read_int d = match d.u with
+  let[@inline] read_digits d = while is_digit d.u do accept d done in
+  let[@inline] read_int d = match d.u with
   | 0x0030 (* 0 *) -> accept d
   | u when is_digit u -> accept d; read_digits d
   | u -> err_exp_digit d
   in
-  let read_opt_frac d = match d.u with
+  let[@inline] read_opt_frac d = match d.u with
   | 0x002E (* . *) ->
       accept d;
       if not (is_digit d.u) then err_exp_digit d else read_digits d;
   | _ -> ()
   in
-  let read_opt_exp d = match d.u with
+  let[@inline] read_opt_exp d = match d.u with
   | 0x0065 (* e *) | 0x0045 (* E *) ->
       token_add d d.u; nextc d;
       (match d.u with
@@ -496,8 +500,6 @@ fun d map ->
 
 and decode_object : type a. decoder -> (a, a) object_map -> a =
 fun d map ->
-  let dict = Dict.empty in
-  let dict = Dict.add Jsont.Repr.object_meta_arg Jsont.Meta.none dict in
   let ws_before = ws_pop d in
   let first_byte = get_last_byte d and first_line = get_line_pos d in
   let dict =
@@ -505,7 +507,7 @@ fun d map ->
     try
       decode_object_map
         d map (Unknown_mems None) String_map.empty String_map.empty []
-        dict
+        Dict.empty
     with
     | Exit -> err_unclosed_object d ~first_byte ~first_line map
   in
