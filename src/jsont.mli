@@ -293,7 +293,7 @@ module Sort : sig
   | Number (** Numbers *)
   | String (** Strings *)
   | Array (** Arrays *)
-  | Obj (** Objects *)
+  | Object (** Objects *)
   (** The type for sorts of JSON values. *)
 
   val to_string : t -> string
@@ -350,7 +350,7 @@ module Error : sig
       on [e] and raises. *)
 
   val push_object : string node -> string node -> t -> 'a
-  (** [push_object obj_kind index e] pushes the given context
+  (** [push_object object_kind index e] pushes the given context
       on [e] and raises. *)
 
   val pp : t fmt
@@ -369,20 +369,20 @@ module Error : sig
   *)
 
   val missing_mems :
-    Meta.t -> obj_kind:string -> exp:string list ->
+    Meta.t -> object_kind:string -> exp:string list ->
     fnd:string list -> 'a
-  (** [missing_mems ctx m ~obj_kind ~exp ~mems] errors when member
-      named [exp] were expected in an object of kind [obj_kind] with
+  (** [missing_mems ctx m ~object_kind ~exp ~mems] errors when member
+      named [exp] were expected in an object of kind [object_kind] with
       metadata [meta] but the object had only [fnd] names (leave empty
       if the info is no longer available). [m]'s location should span
       the object. *)
 
   (*
   val unexpected_mems :
-    Context.t -> Meta.t -> obj_kind:string -> exp:string list ->
+    Context.t -> Meta.t -> object_kind:string -> exp:string list ->
     fnd:string list -> 'a
-  (** [unexpected_mems ctx m ~obj_kind ~exp fnd] errors when member name
-      [n] is found in an object but of kind [obj_kind] is not expected. TODO what does
+  (** [unexpected_mems ctx m ~object_kind ~exp fnd] errors when member name
+      [n] is found in an object but of kind [object_kind] is not expected. TODO what does
       meta represent. *)
 *)
 end
@@ -593,7 +593,7 @@ end
     This module allows to describe JSON objects. See a
     {{!page-cookbook.objects_as_records}simple example},
     more examples can be found in the {{!page-cookbook}cookbook}. *)
-module Obj : sig
+module Object : sig
 
   (** {1:maps Object maps} *)
 
@@ -644,7 +644,7 @@ module Obj : sig
       directly. But this may be useful in certain abstraction contexts. *)
   module Mem : sig
 
-    type ('o, 'dec) obj_map := ('o, 'dec) map
+    type ('o, 'dec) object_map := ('o, 'dec) map
 
     type ('o, 'a) map
     (** The type for mapping a member object to a value ['a] stored
@@ -657,7 +657,7 @@ module Obj : sig
     (** [map name t] maps member named [name] of type [t] in an object
         of type ['o]. See {!Jsont.Obj.mem} for the field semantics. *)
 
-    val app : ('o, 'a -> 'b) obj_map -> ('o, 'a) map -> ('o, 'b) obj_map
+    val app : ('o, 'a -> 'b) object_map -> ('o, 'a) map -> ('o, 'b) object_map
     (** [app map mmap] applies the member map [map] to the contructor of
         the object map [mmap]. In turn this adds the [map] member definition
         to the object described by [map]. *)
@@ -687,7 +687,7 @@ module Obj : sig
     ('o, 'a option -> 'b) map -> ('o, 'b) map
   (** [opt_mem name t map] is:
 {[
-  Jsont.Obj.mem name (Jsont.some t) map
+  Jsont.Object.mem name (Jsont.some t) map
     ~dec_absent:None ~enc_omit:Option.is_none
 ]}
       A shortcut to represent optional members of type ['a] with ['a option]
@@ -707,7 +707,7 @@ module Obj : sig
 
     type 'a jsont := 'a t
 
-    type ('o, 'dec) obj_map := ('o, 'dec) map
+    type ('o, 'dec) object_map := ('o, 'dec) map
 
     (** {1:cases Cases} *)
 
@@ -845,7 +845,7 @@ end
 val any :
   ?kind:string -> ?doc:string -> ?dec_null:'a t -> ?dec_bool:'a t ->
   ?dec_number:'a t -> ?dec_string:'a t -> ?dec_array:'a t ->
-  ?dec_obj:'a t -> ?enc:('a -> 'a t) -> unit -> 'a t
+  ?dec_object:'a t -> ?enc:('a -> 'a t) -> unit -> 'a t
 (** [any ()] maps subsets of JSON value of different sorts to values
     of type ['a]. The unspecified cases are not part of the subset and
     error on decoding. [enc] selects the type on encoding and errors
@@ -1091,7 +1091,7 @@ type name = string node
 type mem = name * json
 (** The type for JSON object members. *)
 
-and obj = mem list
+and object' = mem list
 (** The type for JSON objects. *)
 
 and json =
@@ -1101,7 +1101,7 @@ and json =
 (** Encoders must use [Null] if float is {{!Float.is_finite}not finite}. *)
 | String of string node
 | Array of json list node
-| Obj of obj node (** *)
+| Object of object' node (** *)
 (** The type for generic JSON values. *)
 
 (** Generic JSON values. *)
@@ -1115,17 +1115,17 @@ module Json : sig
   val sort : json -> Sort.t
   (** [sort v] is the sort of value [v]. *)
 
-  val find_mem : string -> obj -> mem option
+  val find_mem : string -> object' -> mem option
   (** [find_mem n ms] find the first member whose name matches [n] in [ms]. *)
 
-  val find_mem' : name -> obj -> mem option
+  val find_mem' : name -> object' -> mem option
   (** [find_mem n ms] is [find_mem (fst n) ms]. *)
 
-  val obj_names : obj -> string list
-  (** [obj_names ms] are the names [ms]. *)
+  val object_names : object' -> string list
+  (** [object_names ms] are the names [ms]. *)
 
-  val obj_names' : obj -> name list
-  (** [obj_names ms] are the names [ms]. *)
+  val object_names' : object' -> name list
+  (** [object_names ms] are the names [ms]. *)
 
   (** {1:cons Constructors} *)
 
@@ -1158,8 +1158,8 @@ module Json : sig
   val mem : name -> json -> mem
   (** [mem n v] is [(n, v)]. [meta] defaults to {!Meta.none}. *)
 
-  val obj : obj cons
-  (** [obj o] is [Obj (o, meta)]. *)
+  val object' : object' cons
+  (** [object o] is [Object (o, meta)]. *)
 
   (** {2:derived Derived} *)
 
@@ -1266,10 +1266,10 @@ val json_string : json t
 val json_array : json t
 (** [json_array] represents JSON arrays by their generic representation. *)
 
-val json_obj : json t
-(** [json_obj] represents JSON objects by their generic representation. *)
+val json_object : json t
+(** [json_object] represents JSON objects by their generic representation. *)
 
-val json_mems : (json, json, mem list) Obj.Mems.map
+val json_mems : (json, json, mem list) Object.Mems.map
 (** [json_mems] is a members map collecting unknown members into a
     generic JSON object. *)
 
@@ -1364,17 +1364,17 @@ val delete_mem : ?allow_absent:bool -> string -> json t
     on decode. Other members are left untouched. The decode errors if
     there is no such member unless [~allow_absent:true] is specified
     in which case the data is left untouched. Encodes generic JSON
-    objects like {!json_obj} does. *)
+    objects like {!json_object} does. *)
 
-val fold_obj : 'a t -> (Meta.t -> string -> 'a -> 'b -> 'b) -> 'b -> 'b t
-(** [fold_obj t f acc] folds [f] over the [t] members of a JSON object
+val fold_object : 'a t -> (Meta.t -> string -> 'a -> 'b -> 'b) -> 'b -> 'b t
+(** [fold_object t f acc] folds [f] over the [t] members of a JSON object
     starting with [acc]. Encodes an empty JSON object. *)
 
-val filter_map_obj :
+val filter_map_object :
   'a t -> 'b t -> (Meta.t -> string -> 'a -> (string * 'b) option) -> json t
-(** [filter_map_obj a b f] maps the [a] members of a JSON object with
+(** [filter_map_object a b f] maps the [a] members of a JSON object with
     [f] to [(n, b)] members or deletes them on [None]. Encodes generic
-    JSON arrays like {!json_obj} does. *)
+    JSON arrays like {!json_object} does. *)
 
 (** {2:indices Indices} *)
 
@@ -1620,7 +1620,7 @@ module Repr : sig
   | Number : (float, 'a) base_map -> 'a t (** Number maps. *)
   | String : (string, 'a) base_map -> 'a t (** String maps. *)
   | Array : ('a, 'elt, 'builder) array_map -> 'a t (** Array maps. *)
-  | Obj : ('o, 'o) obj_map -> 'o t (** Object maps. *)
+  | Object : ('o, 'o) object_map -> 'o t (** Object maps. *)
   | Any : 'a any_map -> 'a t (** Map for different sorts of JSON values. *)
   | Map : ('b, 'a) map -> 'a t (** Map from JSON type ['b] to JSON type ['a]. *)
   | Rec : 'a t Lazy.t -> 'a t (** Recursive definition. *)
@@ -1657,9 +1657,9 @@ module Repr : sig
       be {{!Context.push_nth}pushed} on this context when using [elt] to
       process a given array element. *)
 
-  (** {1:obj_map Object maps} *)
+  (** {1:object_map Object maps} *)
 
-  and ('o, 'dec) obj_map =
+  and ('o, 'dec) object_map =
   { kind : string;
     (** The kind of JSON object (documentation). *)
     doc : string;
@@ -1672,8 +1672,8 @@ module Repr : sig
     (** [mem_encs] is the list of member encoders. *)
     enc_meta : 'o -> Meta.t;
     (** [enc_meta] recovers the metadata of an object (if any). *)
-    shape : 'o obj_shape;
-    (** [shape] is the {{!obj_shape}shape} of the object. *) }
+    shape : 'o object_shape;
+    (** [shape] is the {{!object_shape}shape} of the object. *) }
   (** The type for mapping a JSON object to values of type ['o] using
       a decoding function of type ['dec]. [mem_decs] and [mem_encs]
       have the same {!mem_map} values they are just sorted
@@ -1708,12 +1708,12 @@ module Repr : sig
   (** The type for mapping a JSON member to a value of type ['a] in
       an object represented by a value of type ['o]. *)
 
-  and 'o obj_shape =
-  | Obj_basic : ('o, 'mems, 'builder) unknown_mems -> 'o obj_shape
+  and 'o object_shape =
+  | Object_basic : ('o, 'mems, 'builder) unknown_mems -> 'o object_shape
     (** A basic object, possibly indicating how to handle unknown members *)
-  | Obj_cases :
+  | Object_cases :
       ('o, 'mems, 'builder) unknown_mems option *
-      ('o, 'cases, 'tag) obj_cases -> 'o obj_shape
+      ('o, 'cases, 'tag) object_cases -> 'o object_shape
     (** An object with a case member each case further describing
         an object map. *)
   (** The type for object shapes. *)
@@ -1755,7 +1755,7 @@ module Repr : sig
 
   (** {2:case_objects Case objects} *)
 
-  and ('o, 'cases, 'tag) obj_cases =
+  and ('o, 'cases, 'tag) object_cases =
   { tag : ('tag, 'tag) mem_map;
     (** The JSON member used to decide cases. The [enc] field of
         this [mem_map] should be the identity, this allows
@@ -1783,7 +1783,7 @@ module Repr : sig
   and ('cases, 'case, 'tag) case_map =
   { tag : 'tag;
     (** The tag value for the case. *)
-    obj_map : ('case, 'case) obj_map;
+    object_map : ('case, 'case) object_map;
     (** The object map for the case. *)
     dec : 'case -> 'cases;
     (** [dec] is the function used on decoding to inject the case
@@ -1819,8 +1819,8 @@ module Repr : sig
     (** [dec_string], if any, is used for decoding JSON strings. *)
     dec_array : 'a t option;
     (** [dec_array], if any, is used for decoding JSON arrays. *)
-    dec_obj : 'a t option;
-    (** [dec_obj], if any, is used for decoding JSON objects. *)
+    dec_object : 'a t option;
+    (** [dec_object], if any, is used for decoding JSON objects. *)
     enc : 'a -> 'a t;
     (** [enc] specifies the encoder to use on a given value. *)
   }
@@ -1866,8 +1866,8 @@ module Repr : sig
   (** [array_kind ~kind elt] is an array of kind [kind] for
       an array with element of type [elt]. *)
 
-  val obj_map_value_kind : ('o, 'dec) obj_map  -> string
-  (** [obj_map_kind m] is the kind of definition of [m]. *)
+  val object_map_value_kind : ('o, 'dec) object_map  -> string
+  (** [object_map_kind m] is the kind of definition of [m]. *)
 
   val type_error : Meta.t -> 'a t -> fnd:Sort.t -> 'b
   (** [error_kind p m ~exp ~fnd] errors when kind [exp] was expected
@@ -1877,7 +1877,7 @@ module Repr : sig
       from [t]. *)
 
   val missing_mems_error :
-    Meta.t -> ('o, 'o) obj_map -> exp:mem_dec String_map.t ->
+    Meta.t -> ('o, 'o) object_map -> exp:mem_dec String_map.t ->
     fnd:string list -> 'a
   (** [missing_mems_error] is like {!Error.missing_mems} but with
       information derived from the given argument map descriptions. In
@@ -1885,13 +1885,10 @@ module Repr : sig
       are reported. *)
 
   val unexpected_mems_error :
-    Meta.t -> ('o, 'o) obj_map -> fnd:(string * Meta.t) list -> 'a
-  (** [unexpected_mems ctx m ~obj_kind ~exp fnd] errors when member name
-      [n] is found in an object but is not expected. TODO what does
-      meta represent. *)
+    Meta.t -> ('o, 'o) object_map -> fnd:(string * Meta.t) list -> 'a
 
   val unexpected_case_tag_error :
-    Meta.t -> ('o, 'o) obj_map -> ('o, 'd, 'tag) obj_cases ->
+    Meta.t -> ('o, 'o) object_map -> ('o, 'd, 'tag) object_cases ->
     'tag -> 'a
 
   (** {1:context Context}
@@ -1901,7 +1898,7 @@ module Repr : sig
       at some point. *)
 
   val error_push_object :
-    Meta.t -> ('o, 'dec) obj_map -> string node -> Error.t -> 'a
+    Meta.t -> ('o, 'dec) object_map -> string node -> Error.t -> 'a
 
   val error_push_array :
     Meta.t -> ('array, 'elt, 'builder) array_map -> int node -> Error.t -> 'a
@@ -1921,7 +1918,7 @@ module Repr : sig
 
   val apply_dict : ('ret, 'f) dec_fun -> Dict.t -> 'f
 
-  val obj_meta_arg : Meta.t Type.Id.t
+  val object_meta_arg : Meta.t Type.Id.t
   val pp_code : string fmt
   val pp_kind : string fmt
 
@@ -1934,6 +1931,6 @@ module Repr : sig
     Dict.t -> unknown_mems_option * Dict.t
 
   val finish_object_decode :
-    ('o, 'o) obj_map -> Meta.t -> ('p, 'mems, 'builder) unknown_mems ->
+    ('o, 'o) object_map -> Meta.t -> ('p, 'mems, 'builder) unknown_mems ->
     'builder -> mem_dec String_map.t -> Dict.t -> Dict.t
 end

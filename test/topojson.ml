@@ -36,10 +36,10 @@ module Transform = struct
     Jsont.t2 ~dec ~enc Jsont.number
 
   let jsont =
-    Jsont.Obj.map ~kind:"Transform" make
-    |> Jsont.Obj.mem "scale" v2_jsont ~enc:scale
-    |> Jsont.Obj.mem "translate" v2_jsont ~enc:translate
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"Transform" make
+    |> Jsont.Object.mem "scale" v2_jsont ~enc:scale
+    |> Jsont.Object.mem "translate" v2_jsont ~enc:translate
+    |> Jsont.Object.finish
 end
 
 module Point = struct
@@ -47,9 +47,9 @@ module Point = struct
   let make coordinates = { coordinates }
   let coordinates v = v.coordinates
   let jsont =
-    Jsont.Obj.map ~kind:"Point" make
-    |> Jsont.Obj.mem "coordinates" Position.jsont ~enc:coordinates
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"Point" make
+    |> Jsont.Object.mem "coordinates" Position.jsont ~enc:coordinates
+    |> Jsont.Object.finish
 end
 
 module Multi_point = struct
@@ -57,9 +57,10 @@ module Multi_point = struct
   let make coordinates = { coordinates }
   let coordinates v = v.coordinates
   let jsont =
-    Jsont.Obj.map ~kind:"MultiPoint" make
-    |> Jsont.Obj.mem "coordinates" (Jsont.list Position.jsont) ~enc:coordinates
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"MultiPoint" make
+    |> Jsont.Object.mem "coordinates"
+      (Jsont.list Position.jsont) ~enc:coordinates
+    |> Jsont.Object.finish
 end
 
 module Line_string = struct
@@ -67,9 +68,9 @@ module Line_string = struct
   let make arcs = { arcs }
   let arcs v = v.arcs
   let jsont =
-    Jsont.Obj.map ~kind:"LineString" make
-    |> Jsont.Obj.mem "arcs" Jsont.(list int32) ~enc:arcs
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"LineString" make
+    |> Jsont.Object.mem "arcs" Jsont.(list int32) ~enc:arcs
+    |> Jsont.Object.finish
 end
 
 module Multi_line_string = struct
@@ -77,9 +78,9 @@ module Multi_line_string = struct
   let make arcs = { arcs }
   let arcs v = v.arcs
   let jsont =
-    Jsont.Obj.map ~kind:"MultiLineString" make
-    |> Jsont.Obj.mem "arcs" Jsont.(list (list int32)) ~enc:arcs
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"MultiLineString" make
+    |> Jsont.Object.mem "arcs" Jsont.(list (list int32)) ~enc:arcs
+    |> Jsont.Object.finish
 end
 
 module Polygon = struct
@@ -87,9 +88,9 @@ module Polygon = struct
   let make arcs = { arcs }
   let arcs v = v.arcs
   let jsont =
-    Jsont.Obj.map ~kind:"Polygon" make
-    |> Jsont.Obj.mem "arcs" Jsont.(list (list int32)) ~enc:arcs
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"Polygon" make
+    |> Jsont.Object.mem "arcs" Jsont.(list (list int32)) ~enc:arcs
+    |> Jsont.Object.finish
 end
 
 module Multi_polygon = struct
@@ -97,9 +98,9 @@ module Multi_polygon = struct
   let make arcs = { arcs }
   let arcs v = v.arcs
   let jsont =
-    Jsont.Obj.map ~kind:"MultiPolygon" make
-    |> Jsont.Obj.mem "arcs" Jsont.(list (list (list int32))) ~enc:arcs
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"MultiPolygon" make
+    |> Jsont.Object.mem "arcs" Jsont.(list (list (list int32))) ~enc:arcs
+    |> Jsont.Object.finish
 end
 
 module Geometry = struct
@@ -136,16 +137,16 @@ module Geometry = struct
   let multi_polygon v = Multi_polygon v
   let collection vs = Geometry_collection vs
 
-  let properties_type = Jsont.Obj.as_string_map ~kind:"properties" Jsont.json
+  let properties_type = Jsont.Object.as_string_map ~kind:"properties" Jsont.json
 
   let rec collection_jsont = lazy begin
-    Jsont.Obj.map ~kind:"GeometryCollection" Fun.id
-    |> Jsont.Obj.mem "geometries" (Jsont.list (Jsont.rec' jsont)) ~enc:Fun.id
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"GeometryCollection" Fun.id
+    |> Jsont.Object.mem "geometries" (Jsont.list (Jsont.rec' jsont)) ~enc:Fun.id
+    |> Jsont.Object.finish
   end
 
   and jsont = lazy begin
-    let case_map obj dec = Jsont.Obj.Case.map (Jsont.kind obj) obj ~dec in
+    let case_map obj dec = Jsont.Object.Case.map (Jsont.kind obj) obj ~dec in
     let case_point = case_map Point.jsont point in
     let case_multi_point = case_map Multi_point.jsont multi_point in
     let case_line_string = case_map Line_string.jsont line_string in
@@ -154,31 +155,31 @@ module Geometry = struct
     let case_multi_polygon = case_map Multi_polygon.jsont multi_polygon in
     let case_coll = case_map (Lazy.force collection_jsont) collection in
     let enc_case = function
-    | Point p -> Jsont.Obj.Case.value case_point p
-    | Multi_point m -> Jsont.Obj.Case.value case_multi_point m
-    | Line_string l -> Jsont.Obj.Case.value case_line_string l
-    | Multi_line_string m -> Jsont.Obj.Case.value case_multi_linestr m
-    | Polygon p -> Jsont.Obj.Case.value case_polygon p
-    | Multi_polygon m -> Jsont.Obj.Case.value case_multi_polygon m
-    | Geometry_collection gs -> Jsont.Obj.Case.value case_coll gs
-    and cases = Jsont.Obj.Case.[
+    | Point p -> Jsont.Object.Case.value case_point p
+    | Multi_point m -> Jsont.Object.Case.value case_multi_point m
+    | Line_string l -> Jsont.Object.Case.value case_line_string l
+    | Multi_line_string m -> Jsont.Object.Case.value case_multi_linestr m
+    | Polygon p -> Jsont.Object.Case.value case_polygon p
+    | Multi_polygon m -> Jsont.Object.Case.value case_multi_polygon m
+    | Geometry_collection gs -> Jsont.Object.Case.value case_coll gs
+    and cases = Jsont.Object.Case.[
         make case_point; make case_multi_point; make case_line_string;
         make case_multi_linestr; make case_polygon; make case_multi_polygon;
         make case_coll ]
     in
-    Jsont.Obj.map ~kind:"Geometry" make
-    |> Jsont.Obj.case_mem "type" Jsont.string ~enc:type' ~enc_case cases
+    Jsont.Object.map ~kind:"Geometry" make
+    |> Jsont.Object.case_mem "type" Jsont.string ~enc:type' ~enc_case cases
       ~tag_to_string:Fun.id
-    |> Jsont.Obj.opt_mem "id" Jsont.string ~enc:id
-    |> Jsont.Obj.opt_mem "properties" properties_type ~enc:properties
-    |> Jsont.Obj.opt_mem "bbox" Bbox.jsont ~enc:bbox
-    |> Jsont.Obj.keep_unknown Jsont.json_mems ~enc:unknown
-    |> Jsont.Obj.finish
+    |> Jsont.Object.opt_mem "id" Jsont.string ~enc:id
+    |> Jsont.Object.opt_mem "properties" properties_type ~enc:properties
+    |> Jsont.Object.opt_mem "bbox" Bbox.jsont ~enc:bbox
+    |> Jsont.Object.keep_unknown Jsont.json_mems ~enc:unknown
+    |> Jsont.Object.finish
   end
 
   let jsont = Lazy.force jsont
   type objects = t String_map.t
-  let objects_jsont = Jsont.Obj.as_string_map ~kind:"objects" jsont
+  let objects_jsont = Jsont.Object.as_string_map ~kind:"objects" jsont
 end
 
 module Topology = struct
@@ -199,14 +200,14 @@ module Topology = struct
   let unknown t = t.unknown
   let jsont =
     let kind = "Topology" in
-    Jsont.Obj.map ~kind (fun () -> make)
-    |> Jsont.Obj.mem "type" (Jsont.enum [kind, ()]) ~enc:(Fun.const ())
-    |> Jsont.Obj.mem "objects" Geometry.objects_jsont ~enc:objects
-    |> Jsont.Obj.mem "arcs" Arcs.jsont ~enc:arcs
-    |> Jsont.Obj.opt_mem "transform" Transform.jsont ~enc:transform
-    |> Jsont.Obj.opt_mem "bbox" Bbox.jsont ~enc:bbox
-    |> Jsont.Obj.keep_unknown Jsont.json_mems ~enc:unknown
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind (fun () -> make)
+    |> Jsont.Object.mem "type" (Jsont.enum [kind, ()]) ~enc:(Fun.const ())
+    |> Jsont.Object.mem "objects" Geometry.objects_jsont ~enc:objects
+    |> Jsont.Object.mem "arcs" Arcs.jsont ~enc:arcs
+    |> Jsont.Object.opt_mem "transform" Transform.jsont ~enc:transform
+    |> Jsont.Object.opt_mem "bbox" Bbox.jsont ~enc:bbox
+    |> Jsont.Object.keep_unknown Jsont.json_mems ~enc:unknown
+    |> Jsont.Object.finish
 end
 
 (* Command line interface *)
@@ -226,11 +227,12 @@ let with_infile file f = (* XXX add something to bytesrw. *)
   | file -> In_channel.with_open_bin file (process file)
   with Sys_error e -> Error e
 
-let trip ~file ~format ~locs =
+let trip ~file ~format ~locs ~dec_only =
   log_if_error ~use:1 @@
   with_infile file @@ fun r ->
   log_if_error ~use:1 @@
   let* t = Jsont_bytesrw.decode ~file ~locs Topology.jsont r in
+  if dec_only then Ok 0 else
   let w = Bytesrw.Bytes.Writer.of_out_channel stdout in
   let* () = Jsont_bytesrw.encode ~format ~eod:true Topology.jsont t w in
   Ok 0
@@ -251,8 +253,11 @@ let topojson =
     let doc = strf "Output style. Must be %s." (Arg.doc_alts_enum fmt)in
     Arg.(value & opt (enum fmt) Jsont.Minify &
          info ["f"; "format"] ~doc ~docv:"FMT")
+  and+ dec_only =
+    let doc = "Decode only." in
+    Arg.(value & flag & info ["d"] ~doc)
   in
-  trip ~file ~format ~locs
+  trip ~file ~format ~locs ~dec_only
 
 let main () = Cmd.eval' topojson
 let () = if !Sys.interactive then () else exit (main ())

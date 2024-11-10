@@ -39,7 +39,7 @@ let jv_sort jv =
   if Jstr.equal t type_number then Jsont.Sort.Number else
   if Jstr.equal t type_string then Jsont.Sort.String else
   if Jstr.equal t type_object
-  then (if Jv.is_array jv then Jsont.Sort.Array else Jsont.Sort.Obj) else
+  then (if Jv.is_array jv then Jsont.Sort.Array else Jsont.Sort.Object) else
   Jsont.Error.msgf Jsont.Meta.none "Not a JSON value: %s" (Jstr.to_string t)
 
 (* Getting the members of a Jv.t object in various ways *)
@@ -96,9 +96,9 @@ fun t jv -> match t with
     (match jv_sort jv with
     | Array -> decode_array map jv
     | fnd -> type_error t ~fnd)
-| Obj map ->
+| Object map ->
     (match jv_sort jv with
-    | Obj -> decode_obj map jv
+    | Object -> decode_object map jv
     | fnd -> type_error t ~fnd)
 | Map map -> map.dec (decode map.dom jv)
 | Any map -> decode_any t map jv
@@ -118,40 +118,42 @@ fun map jv ->
   done;
   map.dec_finish Jsont.Meta.none len !b
 
-and decode_obj : type o. (o, o) obj_map -> Jv.t -> o =
+and decode_object : type o. (o, o) object_map -> Jv.t -> o =
 fun map jv ->
-  let dict = Dict.add Jsont.Repr.obj_meta_arg Jsont.Meta.none Dict.empty in
+  let dict = Dict.add Jsont.Repr.object_meta_arg Jsont.Meta.none Dict.empty in
   let names = jv_mem_name_map jv in
   apply_dict map.dec
-    (decode_obj_map map (Unknown_mems None) String_map.empty dict names jv)
+    (decode_object_map map (Unknown_mems None) String_map.empty dict names jv)
 
-and decode_obj_map : type o.
-  (o, o) obj_map -> unknown_mems_option -> mem_dec String_map.t -> Dict.t ->
+and decode_object_map : type o.
+  (o, o) object_map -> unknown_mems_option -> mem_dec String_map.t -> Dict.t ->
   Jstr.t String_map.t -> Jv.t -> Dict.t
 =
 fun map umems mem_decs dict names jv ->
   let u _ _ _ = assert false (* They should be disjoint by contruction *) in
   let mem_decs = String_map.union u mem_decs map.mem_decs in
   match map.shape with
-  | Obj_cases (umems', cases) ->
+  | Object_cases (umems', cases) ->
       let umems' = Unknown_mems umems' in
       let umems,dict = Jsont.Repr.override_unknown_mems ~by:umems umems' dict in
-      decode_obj_cases map umems cases mem_decs dict names jv
-  | Obj_basic umems' ->
+      decode_object_cases map umems cases mem_decs dict names jv
+  | Object_basic umems' ->
       let umems' = Unknown_mems (Some umems') in
       let umems,dict = Jsont.Repr.override_unknown_mems ~by:umems umems' dict in
       match umems with
       | Unknown_mems (Some Unknown_skip | None) ->
           let u = Unknown_skip in
-          decode_obj_basic map u () mem_decs dict (String_map.bindings names) jv
+          decode_object_basic
+            map u () mem_decs dict (String_map.bindings names) jv
       | Unknown_mems (Some (Unknown_error as u)) ->
-          decode_obj_basic map u () mem_decs dict (String_map.bindings names) jv
+          decode_object_basic
+            map u () mem_decs dict (String_map.bindings names) jv
       | Unknown_mems (Some (Unknown_keep (umap, _) as u)) ->
           let umap = umap.dec_empty () and names = String_map.bindings names in
-          decode_obj_basic map u umap mem_decs dict names jv
+          decode_object_basic map u umap mem_decs dict names jv
 
-and decode_obj_basic : type o p m b.
-  (o, o) obj_map -> (p, m, b) unknown_mems -> b ->
+and decode_object_basic : type o p m b.
+  (o, o) object_map -> (p, m, b) unknown_mems -> b ->
   mem_dec String_map.t -> Dict.t -> (string * Jstr.t) list -> Jv.t -> Dict.t
 =
 fun map umems umap mem_decs dict names jv -> match names with
@@ -165,10 +167,11 @@ fun map umems umap mem_decs dict names jv -> match names with
           | Jsont.Error e -> error_push_object map n e
         in
         let mem_decs = String_map.remove n mem_decs in
-        decode_obj_basic map umems umap mem_decs dict names jv
+        decode_object_basic map umems umap mem_decs dict names jv
     | None ->
         match umems with
-        | Unknown_skip -> decode_obj_basic map umems umap mem_decs dict names jv
+        | Unknown_skip ->
+            decode_object_basic map umems umap mem_decs dict names jv
         | Unknown_error ->
             let fnd =
               (n, Jsont.Meta.none) :: find_all_unexpected ~mem_decs names
@@ -181,10 +184,10 @@ fun map umems umap mem_decs dict names jv -> match names with
               in
               mmap.dec_add Jsont.Meta.none n v umap
             in
-            decode_obj_basic map umems umap mem_decs dict names jv
+            decode_object_basic map umems umap mem_decs dict names jv
 
-and decode_obj_cases : type o cs t.
-  (o, o) obj_map -> unknown_mems_option -> (o, cs, t) obj_cases ->
+and decode_object_cases : type o cs t.
+  (o, o) object_map -> unknown_mems_option -> (o, cs, t) object_cases ->
   mem_dec String_map.t -> Dict.t -> Jstr.t String_map.t -> Jv.t -> Dict.t
 =
 fun map umems cases mem_decs dict names jv ->
@@ -195,8 +198,10 @@ fun map umems cases mem_decs dict names jv ->
         Jsont.Repr.unexpected_case_tag_error Jsont.Meta.none map cases tag
     | Some (Case case) ->
         let mems = String_map.remove cases.tag.name names in
-        let dict = decode_obj_map case.obj_map umems mem_decs dict mems jv in
-        Dict.add cases.id (case.dec (apply_dict case.obj_map.dec dict)) dict
+        let dict =
+          decode_object_map case.object_map umems mem_decs dict mems jv
+        in
+        Dict.add cases.id (case.dec (apply_dict case.object_map.dec dict)) dict
   in
   match String_map.find_opt cases.tag.name names with
   | Some jname ->
@@ -207,8 +212,8 @@ fun map umems cases mem_decs dict names jv ->
       | Some tag -> decode_case_tag tag
       | None ->
           let meta = Jsont.Meta.none in
-          let obj_kind = Jsont.Repr.obj_map_value_kind map in
-          Jsont.Error.missing_mems meta ~obj_kind ~exp:[cases.tag.name]
+          let object_kind = Jsont.Repr.object_map_value_kind map in
+          Jsont.Error.missing_mems meta ~object_kind ~exp:[cases.tag.name]
             ~fnd:(jv_mem_name_list jv)
 
 and decode_any : type a. a t -> a any_map -> Jv.t -> a =
@@ -222,7 +227,7 @@ fun t map jv ->
   | Number as s -> case t map.dec_number s jv
   | String as s -> case t map.dec_string s jv
   | Array as s -> case t map.dec_array s jv
-  | Obj as s -> case t map.dec_obj s jv
+  | Object as s -> case t map.dec_object s jv
 
 let decode t jv = decode (Jsont.Repr.of_t t) jv
 let decode_jv' t jv = try Ok (decode t jv) with Jsont.Error e -> Error e
@@ -245,13 +250,13 @@ fun t v -> match t with
     | Jsont.Error e -> error_push_array map i e
     in
     map.enc (add map) (Jv.Jarray.create 0) v
-| Obj map -> encode_obj map ~do_unknown:true v (Jv.obj [||])
+| Object map -> encode_object map ~do_unknown:true v (Jv.obj [||])
 | Any map -> encode (map.enc v) v
 | Map map -> encode map.dom (map.enc v)
 | Rec t -> encode (Lazy.force t) v
 
-and encode_obj :
-  type o. (o, o) Jsont.Repr.obj_map -> do_unknown:bool -> o -> Jv.t -> Jv.t
+and encode_object :
+  type o. (o, o) Jsont.Repr.object_map -> do_unknown:bool -> o -> Jv.t -> Jv.t
 =
 fun map ~do_unknown o jv ->
   let encode_mem map o jv (Mem_enc mmap) =
@@ -264,10 +269,10 @@ fun map ~do_unknown o jv ->
   in
   let jv = List.fold_left (encode_mem map o) jv map.mem_encs in
   match map.shape with
-  | Obj_basic (Unknown_keep (umap, enc)) when do_unknown ->
+  | Object_basic (Unknown_keep (umap, enc)) when do_unknown ->
       encode_unknown_mems map umap (enc o) jv
-  | Obj_basic _ -> jv
-  | Obj_cases (u, cases) ->
+  | Object_basic _ -> jv
+  | Object_cases (u, cases) ->
       let Case_value (case, v) = cases.enc_case (cases.enc o) in
       let jv =
         try
@@ -280,12 +285,12 @@ fun map ~do_unknown o jv ->
       match u with
       | Some (Unknown_keep (umap, enc)) ->
           (* Feels nicer to encode unknowns at the end *)
-          let jv = encode_obj case.obj_map ~do_unknown:false v jv in
+          let jv = encode_object case.object_map ~do_unknown:false v jv in
           encode_unknown_mems map umap (enc o) jv
-      | _ -> encode_obj case.obj_map ~do_unknown v jv
+      | _ -> encode_object case.object_map ~do_unknown v jv
 
 and encode_unknown_mems : type o mems a builder.
-  (o, o) obj_map -> (mems, a, builder) mems_map -> mems -> Jv.t -> Jv.t =
+  (o, o) object_map -> (mems, a, builder) mems_map -> mems -> Jv.t -> Jv.t =
 fun map umap mems jv ->
   let encode_mem map meta name v jv =
     try Jv.set' jv (Jstr.of_string name) (encode umap.mems_type v); jv with

@@ -514,10 +514,11 @@ let test_object_queries () =
     o {|{"a":{"b":1},"c":2}|} ~__POS__;
   update Jsont.(update_mem "a" @@ delete_mem "b")
     o {|{"a":{},"c":2}|} ~__POS__;
-  decode_ok Jsont.(mem "a" @@ fold_obj int (fun _ n v acc -> (n,v) :: acc) [])
+  decode_ok Jsont.(mem "a" @@
+                   fold_object int (fun _ n v acc -> (n,v) :: acc) [])
     o' ~value:["c", 1; "b", 0] ~__POS__;
   update Jsont.(update_mem "a" @@
-                   filter_map_obj int int
+                   filter_map_object int int
                      (fun _ n v -> if n = "b"
                        then None else Some (n ^ n, v + 1)))
     o' {|{"a":{"cc":2}}|} ~__POS__;

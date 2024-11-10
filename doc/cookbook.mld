@@ -123,10 +123,10 @@ module Person = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Obj.map make ~kind:"Person"
-    |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-    |> Jsont.Obj.mem "age" Jsont.int ~enc:age
-    |> Jsont.Obj.finish
+    Jsont.Object.map make ~kind:"Person"
+    |> Jsont.Object.mem "name" Jsont.string ~enc:name
+    |> Jsont.Object.mem "age" Jsont.int ~enc:age
+    |> Jsont.Object.finish
 end
 ]}
 
@@ -141,17 +141,17 @@ module String_map = Map.Make (String)
 
 let map : ?kind:string -> 'a Jsont.t -> 'a String_map.t Jsont.t =
 fun ?kind t ->
-  Jsont.Obj.map ?kind Fun.id
-  |> Jsont.Obj.keep_unknown (Jsont.Obj.Mems.string_map t) ~enc:Fun.id
-  |> Jsont.Obj.finish
+  Jsont.Object.map ?kind Fun.id
+  |> Jsont.Object.keep_unknown (Jsont.Object.Mems.string_map t) ~enc:Fun.id
+  |> Jsont.Object.finish
 ]}
 
 Since the pattern is common this is directly exposed as
-{!Jsont.Obj.as_string_map}.
+{!Jsont.Object.as_string_map}.
 
 {2:optional_members Optional members}
 
-By default members specified via {!Jsont.Obj.mem} are mandatory and
+By default members specified via {!Jsont.Object.mem} are mandatory and
 decoding errors if the member is absent.
 
 For those cases where the member is optional a default [dec_absent] value must
@@ -169,31 +169,31 @@ module Person_opt_age = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Obj.map make ~kind:"Person"
-    |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-    |> Jsont.Obj.mem "age" Jsont.(some int)
+    Jsont.Object.map make ~kind:"Person"
+    |> Jsont.Object.mem "name" Jsont.string ~enc:name
+    |> Jsont.Object.mem "age" Jsont.(some int)
       ~dec_absent:None ~enc_omit:Option.is_none ~enc:age
-    |> Jsont.Obj.finish
+    |> Jsont.Object.finish
 end
 ]}
 
 When absence is represented by [None] like here the
-{!Jsont.Obj.opt_mem} function can be used. It's stricly equivalent to
+{!Jsont.Object.opt_mem} function can be used. It's stricly equivalent to
 the above but more concise.
 
 {2:unknown_members Unknown object members}
 
 In JSON objects maps, there are three different ways to handle
-object members that have not been declared by a {!Jsont.Obj.mem}
-or {!Jsont.Obj.opt_mem}.
+object members that have not been declared by a {!Jsont.Object.mem}
+or {!Jsont.Object.opt_mem}.
 
 {3:skipping Skipping}
 
-By default {!Jsont.Obj.val-map} skips unknown object members.
+By default {!Jsont.Object.val-map} skips unknown object members.
 
 {3:erroring Erroring}
 
-To error on unknown members use {!Jsont.Obj.val-error_unknown}:
+To error on unknown members use {!Jsont.Object.val-error_unknown}:
 {[
 module Person_strict = struct
   type t = { name : string; age : int; }
@@ -201,11 +201,11 @@ module Person_strict = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Obj.map ~kind:"Person" make
-    |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-    |> Jsont.Obj.mem "age" Jsont.int ~enc:age
-    |> Jsont.Obj.error_unknown
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"Person" make
+    |> Jsont.Object.mem "name" Jsont.string ~enc:name
+    |> Jsont.Object.mem "age" Jsont.int ~enc:age
+    |> Jsont.Object.error_unknown
+    |> Jsont.Object.finish
 end
 ]}
 
@@ -214,7 +214,7 @@ end
 If a JSON data schema allows foreign members or to partially model an
 object, unknown members can be collected into a generic
 {!Jsont.Json.t} object and stored in an OCaml field by using
-{!Jsont.Obj.keep_unknown} and {!Jsont.json_mems}:
+{!Jsont.Object.keep_unknown} and {!Jsont.json_mems}:
 
 {[
 module Person_keep = struct
@@ -224,18 +224,18 @@ module Person_keep = struct
   let age p = p.age
   let unknown v = v.unknown
   let jsont =
-    Jsont.Obj.map ~kind:"Person" make
-    |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-    |> Jsont.Obj.mem "age" Jsont.int ~enc:age
-    |> Jsont.Obj.keep_unknown Jsont.json_mems ~enc:unknown
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"Person" make
+    |> Jsont.Object.mem "name" Jsont.string ~enc:name
+    |> Jsont.Object.mem "age" Jsont.int ~enc:age
+    |> Jsont.Object.keep_unknown Jsont.json_mems ~enc:unknown
+    |> Jsont.Object.finish
 end
 ]}
 
 The value of the [unknown] field can be further queried with other
 JSON types and {!Jsont.Json.decode}. It is also possible to define
 your own data structure to keep unknown members, see
-{!Jsont.Obj.Mems}. See also {!objects_as_maps}.
+{!Jsont.Object.Mems}. See also {!objects_as_maps}.
 
 {2:recursion Dealing with recursive JSON}
 
@@ -265,10 +265,10 @@ module Tree = struct
   let children (Node (_, children)) = children
   let jsont value_type =
     let rec t = lazy
-      (Jsont.Obj.map ~kind:"Tree" make
-       |> Jsont.Obj.mem "value" value_type ~enc:value
-       |> Jsont.Obj.mem "children" (Jsont.list (Jsont.rec' t)) ~enc:children
-       |> Jsont.Obj.finish)
+      (Jsont.Object.map ~kind:"Tree" make
+       |> Jsont.Object.mem "value" value_type ~enc:value
+       |> Jsont.Object.mem "children" (Jsont.list (Jsont.rec' t)) ~enc:children
+       |> Jsont.Object.finish)
     in
     Lazy.force t
 end
@@ -280,9 +280,9 @@ Sometimes JSON objects have a distinguished case member, called
 ["type"], ["class"] or ["version"] whose value define the rest of the
 object.
 
-The {!Jsont.Obj.Case} module handles this pattern. Each case is
-described by a {!Jsont.Obj.type-map} object description and the
-{!Jsont.Obj.case_mem} allows to chose between them according to the
+The {!Jsont.Object.Case} module handles this pattern. Each case is
+described by a {!Jsont.Object.type-map} object description and the
+{!Jsont.Object.case_mem} allows to chose between them according to the
 value of the case member.
 
 In OCaml there are two main ways to represent these case objects.
@@ -312,10 +312,10 @@ module Geometry_variant = struct
     let name c = c.name
     let radius c = c.radius
     let jsont =
-      Jsont.Obj.map ~kind:"Circle" make
-      |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-      |> Jsont.Obj.mem "radius" Jsont.number ~enc:radius
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"Circle" make
+      |> Jsont.Object.mem "name" Jsont.string ~enc:name
+      |> Jsont.Object.mem "radius" Jsont.number ~enc:radius
+      |> Jsont.Object.finish
   end
 
   module Rect = struct
@@ -325,27 +325,27 @@ module Geometry_variant = struct
     let width r = r.width
     let height r = r.height
     let jsont =
-      Jsont.Obj.map ~kind:"Rect" make
-      |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-      |> Jsont.Obj.mem "width" Jsont.number ~enc:width
-      |> Jsont.Obj.mem "height" Jsont.number ~enc:height
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"Rect" make
+      |> Jsont.Object.mem "name" Jsont.string ~enc:name
+      |> Jsont.Object.mem "width" Jsont.number ~enc:width
+      |> Jsont.Object.mem "height" Jsont.number ~enc:height
+      |> Jsont.Object.finish
   end
 
   type t = Circle of Circle.t | Rect of Rect.t
   let circle c = Circle c
   let rect r = Rect r
   let jsont =
-    let circle = Jsont.Obj.Case.map "Circle" Circle.jsont ~dec:circle in
-    let rect = Jsont.Obj.Case.map "Rect" Rect.jsont ~dec:rect in
+    let circle = Jsont.Object.Case.map "Circle" Circle.jsont ~dec:circle in
+    let rect = Jsont.Object.Case.map "Rect" Rect.jsont ~dec:rect in
     let enc_case = function
-    | Circle c -> Jsont.Obj.Case.value circle c
-    | Rect r -> Jsont.Obj.Case.value rect r
+    | Circle c -> Jsont.Object.Case.value circle c
+    | Rect r -> Jsont.Object.Case.value rect r
     in
-    let cases = Jsont.Obj.Case.[make circle; make rect] in
-    Jsont.Obj.map ~kind:"Geometry" Fun.id
-    |> Jsont.Obj.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
-    |> Jsont.Obj.finish
+    let cases = Jsont.Object.Case.[make circle; make rect] in
+    Jsont.Object.map ~kind:"Geometry" Fun.id
+    |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
+    |> Jsont.Object.finish
 end
 ]}
 
@@ -358,9 +358,9 @@ module Geometry_record = struct
     let make radius = { radius }
     let radius c = c.radius
     let jsont =
-      Jsont.Obj.map ~kind:"Circle" make
-      |> Jsont.Obj.mem "radius" Jsont.number ~enc:radius
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"Circle" make
+      |> Jsont.Object.mem "radius" Jsont.number ~enc:radius
+      |> Jsont.Object.finish
   end
 
   module Rect = struct
@@ -369,10 +369,10 @@ module Geometry_record = struct
     let width r = r.width
     let height r = r.height
     let jsont =
-      Jsont.Obj.map ~kind:"Rect" make
-      |> Jsont.Obj.mem "width" Jsont.number ~enc:width
-      |> Jsont.Obj.mem "height" Jsont.number ~enc:height
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"Rect" make
+      |> Jsont.Object.mem "width" Jsont.number ~enc:width
+      |> Jsont.Object.mem "height" Jsont.number ~enc:height
+      |> Jsont.Object.finish
   end
 
   type type' = Circle of Circle.t | Rect of Rect.t
@@ -385,16 +385,16 @@ module Geometry_record = struct
   let type' g = g.type'
 
   let jsont =
-    let circle = Jsont.Obj.Case.map "Circle" Circle.jsont ~dec:circle in
-    let rect = Jsont.Obj.Case.map "Rect" Rect.jsont ~dec:rect in
+    let circle = Jsont.Object.Case.map "Circle" Circle.jsont ~dec:circle in
+    let rect = Jsont.Object.Case.map "Rect" Rect.jsont ~dec:rect in
     let enc_case = function
-    | Circle c -> Jsont.Obj.Case.value circle c
-    | Rect r -> Jsont.Obj.Case.value rect r
+    | Circle c -> Jsont.Object.Case.value circle c
+    | Rect r -> Jsont.Object.Case.value rect r
     in
-    let cases = Jsont.Obj.Case.[make circle; make rect] in
-    Jsont.Obj.map ~kind:"Geometry" make
-    |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-    |> Jsont.Obj.case_mem "type" Jsont.string ~enc:type' ~enc_case cases
-    |> Jsont.Obj.finish
+    let cases = Jsont.Object.Case.[make circle; make rect] in
+    Jsont.Object.map ~kind:"Geometry" make
+    |> Jsont.Object.mem "name" Jsont.string ~enc:name
+    |> Jsont.Object.case_mem "type" Jsont.string ~enc:type' ~enc_case cases
+    |> Jsont.Object.finish
 end
 ]}

@@ -31,12 +31,12 @@ module Item = struct
   let status i = i.status
   let tags i = i.tags
   let jsont =
-    Jsont.Obj.map ~kind:"Item" make
-    |> Jsont.Obj.mem "task" Jsont.string ~enc:task
-    |> Jsont.Obj.mem "status" Status.jsont ~enc:status
-    |> Jsont.Obj.mem "tags"
+    Jsont.Object.map ~kind:"Item" make
+    |> Jsont.Object.mem "task" Jsont.string ~enc:task
+    |> Jsont.Object.mem "status" Status.jsont ~enc:status
+    |> Jsont.Object.mem "tags"
          Jsont.(list string) ~dec_absent:[] ~enc:tags ~enc_omit:(( = ) [])
-    |> Jsont.Obj.finish
+    |> Jsont.Object.finish
 end
 
 let items = Jsont.list Item.jsont

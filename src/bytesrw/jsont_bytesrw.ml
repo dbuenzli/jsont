@@ -197,10 +197,10 @@ let err_exp_colon d =
     pp_code ":" pp_code "member name" pp_quchar d.u
 
 let err_unclosed_object
-    ~first_byte ~first_line d (map : ('o, 'o) Jsont.Repr.obj_map)
+    ~first_byte ~first_line d (map : ('o, 'o) Jsont.Repr.object_map)
   =
   err_to_here ~first_byte ~first_line d "Unclosed %a"
-    Jsont.Repr.pp_kind (Jsont.Repr.obj_map_value_kind map)
+    Jsont.Repr.pp_kind (Jsont.Repr.object_map_value_kind map)
 
 (* Decode next character in d.u *)
 
@@ -284,7 +284,7 @@ let token_pop_float d ~meta =
 let current_json_sort d = match d.u with
 | 0x0066 (* f *) | 0x0074 (* t *) -> Jsont.Sort.Bool
 | 0x006E (* n *) -> Jsont.Sort.Null
-| 0x007B (* { *) -> Jsont.Sort.Obj
+| 0x007B (* { *) -> Jsont.Sort.Object
 | 0x005B (* [ *) -> Jsont.Sort.Array
 | 0x0022 (* DQUOTE *) -> Jsont.Sort.String
 | u when is_number_start u -> Jsont.Sort.Number
@@ -443,9 +443,9 @@ fun d t -> match (read_ws d; t) with
     (match d.u with
     | 0x005B (* [ *) -> decode_array d map
     | _ -> type_error d t)
-| Obj map ->
+| Object map ->
     (match d.u with
-    | 0x007B (* { *) -> decode_obj d map
+    | 0x007B (* { *) -> decode_object d map
     | _ -> type_error d t)
 | Map map -> map.dec (decode d map.dom)
 | Any map -> decode_any d t map
@@ -483,18 +483,16 @@ fun d map ->
   let meta = meta_make d ~ws_before ~ws_after textloc in
   map.dec_finish meta len b
 
-and decode_obj :
-  type a dec. decoder -> (a, a) obj_map -> a
-=
+and decode_object : type a. decoder -> (a, a) object_map -> a =
 fun d map ->
   let dict = Dict.empty in
-  let dict = Dict.add Jsont.Repr.obj_meta_arg Jsont.Meta.none dict in
+  let dict = Dict.add Jsont.Repr.object_meta_arg Jsont.Meta.none dict in
   let ws_before = ws_pop d in
   let first_byte = get_last_byte d and first_line = get_line_pos d in
   let dict =
     nextc d; read_ws d;
     try
-      decode_obj_map
+      decode_object_map
         d map (Unknown_mems None) String_map.empty String_map.empty []
         dict
     with
@@ -503,13 +501,13 @@ fun d map ->
   let textloc = textloc_to_current d ~first_byte ~first_line in
   let ws_after = nextc d; read_ws d; ws_pop d in
   let meta = meta_make d ~ws_before ~ws_after textloc in
-  let dict = Dict.add Jsont.Repr.obj_meta_arg meta dict in
+  let dict = Dict.add Jsont.Repr.object_meta_arg meta dict in
   Jsont.Repr.apply_dict map.dec dict
 
-and decode_obj_delayed : type o.
-  decoder -> (o, o) obj_map -> mem_dec String_map.t ->
-  mem_dec String_map.t -> Jsont.obj -> Dict.t ->
-  mem_dec String_map.t * Jsont.obj * Dict.t
+and decode_object_delayed : type o.
+  decoder -> (o, o) object_map -> mem_dec String_map.t ->
+  mem_dec String_map.t -> Jsont.object' -> Dict.t ->
+  mem_dec String_map.t * Jsont.object' * Dict.t
 =
 fun d map mem_miss mem_decs delay dict ->
   let rec loop d map mem_miss mem_decs rem_delay dict = function
@@ -539,31 +537,32 @@ fun d map mem_miss mem_decs delay dict ->
   in
   loop d map mem_miss mem_decs [] dict delay
 
-and decode_obj_map : type o.
-  decoder -> (o, o) obj_map -> unknown_mems_option ->
-  mem_dec String_map.t -> mem_dec String_map.t -> Jsont.obj -> Dict.t -> Dict.t
+and decode_object_map : type o.
+  decoder -> (o, o) object_map -> unknown_mems_option ->
+  mem_dec String_map.t -> mem_dec String_map.t -> Jsont.object' -> Dict.t ->
+  Dict.t
 =
 fun d map umems mem_miss mem_decs delay dict ->
   let u n _ _ = assert false in
   let mem_miss = String_map.union u mem_miss map.mem_decs in
   let mem_decs = String_map.union u mem_decs map.mem_decs in
   match map.shape with
-  | Obj_cases (umems', cases) ->
+  | Object_cases (umems', cases) ->
       let umems' = (Unknown_mems umems') in
       let umems,dict = Jsont.Repr.override_unknown_mems ~by:umems umems' dict in
-      decode_obj_case d map umems cases mem_miss mem_decs delay dict
-  | Obj_basic umems' ->
+      decode_object_case d map umems cases mem_miss mem_decs delay dict
+  | Object_basic umems' ->
       let mem_miss, delay, dict =
-        decode_obj_delayed d map mem_miss mem_decs delay dict
+        decode_object_delayed d map mem_miss mem_decs delay dict
       in
       let umems' = Unknown_mems (Some umems') in
       let umems,dict = Jsont.Repr.override_unknown_mems ~by:umems umems' dict in
       match umems with
       | Unknown_mems (Some Unknown_skip | None) ->
-          decode_obj_basic d map Unknown_skip () mem_miss mem_decs dict
+          decode_object_basic d map Unknown_skip () mem_miss mem_decs dict
       | Unknown_mems (Some (Unknown_error as u)) ->
           if delay = []
-          then decode_obj_basic d map u () mem_miss mem_decs dict else
+          then decode_object_basic d map u () mem_miss mem_decs dict else
           let meta = (* FIXME *) Jsont.Meta.none in
           let fnd = List.map fst delay in
           Jsont.Repr.unexpected_mems_error meta map ~fnd
@@ -582,10 +581,10 @@ fun d map umems mem_miss mem_decs delay dict ->
                 Jsont.Repr.error_push_object meta map nm e
           in
           let umems = List.fold_left add_delay (umap.dec_empty ()) delay in
-          decode_obj_basic d map u umems mem_miss mem_decs dict
+          decode_object_basic d map u umems mem_miss mem_decs dict
 
-and decode_obj_basic : type o p mems builder.
-  decoder -> (o, o) obj_map -> (p, mems, builder) unknown_mems -> builder ->
+and decode_object_basic : type o p mems builder.
+  decoder -> (o, o) object_map -> (p, mems, builder) unknown_mems -> builder ->
   mem_dec String_map.t -> mem_dec String_map.t -> Dict.t -> Dict.t
 =
 fun d map u umap mem_miss mem_decs dict -> match d.u with
@@ -604,7 +603,7 @@ fun d map u umap mem_miss mem_decs dict -> match d.u with
             Jsont.Repr.error_push_object ometa map (name, meta) e
         in
         read_json_mem_sep d;
-        decode_obj_basic d map u umap mem_miss mem_decs dict
+        decode_object_basic d map u umap mem_miss mem_decs dict
     | None ->
         match u with
         | Unknown_skip ->
@@ -614,7 +613,7 @@ fun d map u umap mem_miss mem_decs dict -> match d.u with
                 Jsont.Repr.error_push_object ometa map (name, meta) e
             in
             read_json_mem_sep d;
-            decode_obj_basic d map u umap mem_miss mem_decs dict
+            decode_object_basic d map u umap mem_miss mem_decs dict
         | Unknown_error ->
             let name = (* FIXME *) name, Jsont.Meta.none in
             let meta = (* FIXME *) Jsont.Meta.none in
@@ -627,15 +626,15 @@ fun d map u umap mem_miss mem_decs dict -> match d.u with
                   Jsont.Repr.error_push_object ometa map (name, meta) e
             in
             read_json_mem_sep d;
-            decode_obj_basic d map u umap mem_miss mem_decs dict
+            decode_object_basic d map u umap mem_miss mem_decs dict
     end
 | u when u = eot -> raise Exit (* Ugly *)
 | fnd -> err_exp_mem_or_eoo d
 
-and decode_obj_case : type o cases tag.
-  decoder -> (o, o) obj_map -> unknown_mems_option ->
-  (o, cases, tag) obj_cases -> mem_dec String_map.t -> mem_dec String_map.t ->
-  Jsont.obj -> Dict.t -> Dict.t
+and decode_object_case : type o cases tag.
+  decoder -> (o, o) object_map -> unknown_mems_option ->
+  (o, cases, tag) object_cases -> mem_dec String_map.t ->
+  mem_dec String_map.t -> Jsont.object' -> Dict.t -> Dict.t
 =
 fun d map umems cases mem_miss mem_decs delay dict ->
   let decode_case_tag map umems cases mem_miss mem_decs tag delay =
@@ -646,9 +645,9 @@ fun d map umems cases mem_miss mem_decs delay dict ->
         Jsont.Repr.unexpected_case_tag_error meta map cases tag
     | Some (Case case) ->
         let dict =
-          decode_obj_map d case.obj_map umems mem_miss mem_decs delay dict
+          decode_object_map d case.object_map umems mem_miss mem_decs delay dict
         in
-        Dict.add cases.id (case.dec (apply_dict case.obj_map.dec dict)) dict
+        Dict.add cases.id (case.dec (apply_dict case.object_map.dec dict)) dict
   in
   match d.u with
   | 0x007D (* } *) ->
@@ -656,8 +655,8 @@ fun d map umems cases mem_miss mem_decs delay dict ->
       | Some tag -> decode_case_tag map umems cases mem_miss mem_decs tag delay
       | None ->
           let meta = Jsont.Meta.none in (* FIXME *)
-          let obj_kind = Jsont.Repr.obj_map_value_kind map in
-          Jsont.Error.missing_mems meta ~obj_kind
+          let object_kind = Jsont.Repr.object_map_value_kind map in
+          Jsont.Error.missing_mems meta ~object_kind
             ~exp:[cases.tag.name]
             ~fnd:(List.map (fun ((n, _), _) -> n) delay))
   | 0x0022 ->
@@ -681,7 +680,7 @@ fun d map umems cases mem_miss mem_decs delay dict ->
               Jsont.Repr.error_push_object ometa map (name, meta) e
           in
           read_json_mem_sep d;
-          decode_obj_case d map umems cases mem_miss mem_decs delay dict
+          decode_object_case d map umems cases mem_miss mem_decs delay dict
       | None ->
           (* Because JSON can be out of orer we don't know how to decode
              this yet. Generic decode *)
@@ -693,7 +692,7 @@ fun d map umems cases mem_miss mem_decs delay dict ->
           in
           let delay = ((name, meta), v) :: delay in
           read_json_mem_sep d;
-          decode_obj_case d map umems cases mem_miss mem_decs delay dict
+          decode_object_case d map umems cases mem_miss mem_decs delay dict
       end
   | u when u = eot -> raise Exit (* Ugly *)
   | fnd -> err_exp_mem_or_eoo d
@@ -709,7 +708,7 @@ fun d t map ->
   | 0x0074 (* t *) -> case d t map.dec_bool
   | 0x0022 (* DQUOTE *) -> case d t map.dec_string
   | 0x005B (* [ *) -> case d t map.dec_array
-  | 0x007B (* { *) -> case d t map.dec_obj
+  | 0x007B (* { *) -> case d t map.dec_object
   | u when is_number_start u -> case d t map.dec_number
   | _ -> err_not_json_value d
 
@@ -867,7 +866,7 @@ fun ~nest t e v -> match t with
 | Number map -> encode_number map e v
 | String map -> encode_string map e v
 | Array map -> encode_array ~nest map e v
-| Obj map -> encode_obj ~nest map e v
+| Object map -> encode_object ~nest map e v
 | Any map -> encode ~nest (map.enc v) e v
 | Map map -> encode ~nest map.dom e (map.enc v)
 | Rec t -> encode ~nest (Lazy.force t) e v
@@ -876,11 +875,11 @@ and encode_array : type a elt b.
   nest:int -> (a, elt, b) Jsont.Repr.array_map -> encoder -> a -> unit
 =
 fun ~nest map e v ->
-   let encode_element ~nest map e i v =
-     if i <> 0 then write_sep e;
-     try encode ~nest map.elt e v; e with
-     | Jsont.Error e ->
-         Jsont.Repr.error_push_array Jsont.Meta.none map (i, Jsont.Meta.none) e
+  let encode_element ~nest map e i v =
+    if i <> 0 then write_sep e;
+    try encode ~nest map.elt e v; e with
+    | Jsont.Error e ->
+        Jsont.Repr.error_push_array Jsont.Meta.none map (i, Jsont.Meta.none) e
   in
   match e.format with
   | Jsont.Minify ->
@@ -912,33 +911,33 @@ fun ~nest map e v ->
       if array_not_empty e then (write_char e '\n'; write_indent e ~nest);
       write_char e ']'
 
-and encode_obj : type o enc.
-  nest:int -> (o, o) Jsont.Repr.obj_map -> encoder -> o -> unit
+and encode_object : type o enc.
+  nest:int -> (o, o) Jsont.Repr.object_map -> encoder -> o -> unit
  =
  fun ~nest map e o -> match e.format with
  | Jsont.Minify ->
      write_char e '{';
      ignore @@
-     encode_obj_map ~nest:(nest + 1) map ~do_unknown:true e ~start:true o;
+     encode_object_map ~nest:(nest + 1) map ~do_unknown:true e ~start:true o;
      write_char e '}';
  | Jsont.Layout ->
      let meta = map.enc_meta o in
      write_ws_before e meta;
      write_char e '{';
      ignore @@
-     encode_obj_map ~nest:(nest + 1) map ~do_unknown:true e ~start:true o;
+     encode_object_map ~nest:(nest + 1) map ~do_unknown:true e ~start:true o;
      write_char e '}';
      write_ws_after e meta;
  | Jsont.Indent ->
      write_char e '{';
      let start =
-       encode_obj_map ~nest:(nest + 1) map ~do_unknown:true e ~start:true o
+       encode_object_map ~nest:(nest + 1) map ~do_unknown:true e ~start:true o
      in
      if not start then (write_char e '\n'; write_indent e ~nest);
      write_char e '}'
 
-and encode_obj_map : type o enc.
-  nest:int -> (o, o) Jsont.Repr.obj_map -> do_unknown:bool -> encoder ->
+and encode_object_map : type o enc.
+  nest:int -> (o, o) Jsont.Repr.object_map -> do_unknown:bool -> encoder ->
   start:bool -> o -> bool
 =
 fun ~nest map ~do_unknown e ~start o ->
@@ -966,7 +965,7 @@ fun ~nest map ~do_unknown e ~start o ->
           (mmap.name, Jsont.Meta.none) e
   in
   match map.shape with
-  | Obj_basic u ->
+  | Object_basic u ->
       let start =
         List.fold_left (encode_mem ~nest map e o) start map.mem_encs
       in
@@ -975,7 +974,7 @@ fun ~nest map ~do_unknown e ~start o ->
           encode_unknown_mems ~nest map umap e ~start (enc o)
       | _ -> start
       end
-  | Obj_cases (umap, cases) ->
+  | Object_cases (umap, cases) ->
       let Case_value (case, c) = cases.enc_case (cases.enc o) in
       let start =
         if cases.tag.enc_omit case.tag
@@ -988,14 +987,14 @@ fun ~nest map ~do_unknown e ~start o ->
       match umap with
       | Some (Unknown_keep (umap, enc)) ->
           let start =
-            encode_obj_map ~nest case.obj_map ~do_unknown:false e ~start c
+            encode_object_map ~nest case.object_map ~do_unknown:false e ~start c
           in
           encode_unknown_mems ~nest map umap e ~start (enc o)
       | _ ->
-          encode_obj_map ~nest case.obj_map ~do_unknown e ~start c
+          encode_object_map ~nest case.object_map ~do_unknown e ~start c
 
 and encode_unknown_mems : type o dec mems a builder.
-  nest:int -> (o,o) obj_map -> (mems, a, builder) mems_map ->
+  nest:int -> (o,o) object_map -> (mems, a, builder) mems_map ->
   encoder -> start:bool -> mems -> bool
 =
 fun ~nest map umap e ~start mems ->

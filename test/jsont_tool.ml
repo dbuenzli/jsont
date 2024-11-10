@@ -53,7 +53,9 @@ let output_string ~format ~number_format j = match format with
 | `Format format ->
     Jsont_bytesrw.encode_string ~format ~number_format Jsont.json j
 
-let trip_type ~file ~format ~number_format ~diff:do_diff ~locs t =
+let trip_type
+    ?(dec_only = false) ~file ~format ~number_format ~diff:do_diff ~locs t
+  =
   Log.if_error ~use:exit_err_file @@
   with_infile file @@ fun r ->
   Log.if_error ~use:exit_err_json @@
@@ -61,6 +63,7 @@ let trip_type ~file ~format ~number_format ~diff:do_diff ~locs t =
   match do_diff with
   | false ->
       let* j = Jsont_bytesrw.decode ~file ~layout ~locs t r in
+      if dec_only then Ok 0 else
       let* () = output ~format ~number_format j in
       Ok 0
   | true ->
@@ -75,8 +78,8 @@ let delete ~file ~path ~format ~number_format ~diff ~allow_absent ~locs =
   let del = Jsont.delete_path ~allow_absent path in
   trip_type ~file ~format ~number_format ~diff ~locs del
 
-let fmt ~file ~format ~number_format ~diff ~locs =
-  trip_type ~file ~format ~number_format ~diff ~locs Jsont.json
+let fmt ~file ~format ~number_format ~diff ~locs ~dec_only =
+  trip_type ~file ~format ~number_format ~diff ~locs ~dec_only Jsont.json
 
 let get ~file ~path ~format ~number_format ~diff ~absent ~locs =
   let get = Jsont.path ?absent path Jsont.json in
@@ -101,7 +104,7 @@ let pp_locs_outline ppf v =
       Format.pp_open_vbox ppf indent;
       loc "Array" ppf m; (Fmt.list value) ppf l;
       Format.pp_close_box ppf ()
-  | Jsont.Obj (o, m) ->
+  | Jsont.Object (o, m) ->
       let mem ppf ((name, m), v) =
         let l = Fmt.str "Member %a" (Fmt.code' Fmt.text_string_literal) name in
         loc l ppf m; value ppf v;
@@ -191,6 +194,10 @@ let diff_flag =
   in
   Arg.(value & flag & info ["diff"] ~doc)
 
+let dec_only =
+  let doc = "Decode only, no output." in
+  Arg.(value & flag & info ["d"; "decode-only"] ~doc)
+
 let file_pos ~pos:p =
   let doc = "$(docv) is the JSON file. Use $(b,-) for stdin." in
   Arg.(value & pos p string "-" & info [] ~doc ~docv:"FILE")
@@ -243,8 +250,9 @@ let fmt_cmd =
   and+ format = format_opt_default_pretty
   and+ number_format = number_format_opt
   and+ diff = diff_flag
-  and+ locs = locs in
-  fmt ~file ~format ~number_format ~diff ~locs
+  and+ locs = locs
+  and+ dec_only = dec_only in
+  fmt ~file ~format ~number_format ~diff ~locs ~dec_only
 
 let get_cmd =
   let doc = "Extract the value indexed by a JSON path" in

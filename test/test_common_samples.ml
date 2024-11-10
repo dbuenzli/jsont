@@ -21,12 +21,12 @@ module Item = struct
   let status i = i.status
   let tags i = i.tags
   let jsont =
-    Jsont.Obj.map ~kind:"Item" make
-    |> Jsont.Obj.mem "task" Jsont.string ~enc:task
-    |> Jsont.Obj.mem "status" Status.jsont ~enc:status
-    |> Jsont.Obj.mem "tags"
+    Jsont.Object.map ~kind:"Item" make
+    |> Jsont.Object.mem "task" Jsont.string ~enc:task
+    |> Jsont.Object.mem "status" Status.jsont ~enc:status
+    |> Jsont.Object.mem "tags"
       Jsont.(list string) ~dec_absent:[] ~enc:tags ~enc_omit:(( = ) [])
-    |> Jsont.Obj.finish
+    |> Jsont.Object.finish
 
 end
 
@@ -58,23 +58,23 @@ module Unknown = struct
   let m v = v.m
 
   let skip_jsont =
-    Jsont.Obj.map ~kind:"unknown-skip" make
-    |> Jsont.Obj.mem "m" Jsont.bool ~enc:m
-    |> Jsont.Obj.skip_unknown
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"unknown-skip" make
+    |> Jsont.Object.mem "m" Jsont.bool ~enc:m
+    |> Jsont.Object.skip_unknown
+    |> Jsont.Object.finish
 
   let error_jsont =
-    Jsont.Obj.map ~kind:"unknown-skip" make
-    |> Jsont.Obj.mem "m" Jsont.bool ~enc:m
-    |> Jsont.Obj.error_unknown
-    |> Jsont.Obj.finish
+    Jsont.Object.map ~kind:"unknown-skip" make
+    |> Jsont.Object.mem "m" Jsont.bool ~enc:m
+    |> Jsont.Object.error_unknown
+    |> Jsont.Object.finish
 
   let keep_jsont : (t * int String_map.t) Jsont.t =
-    let unknown = Jsont.Obj.Mems.string_map Jsont.int in
-    Jsont.Obj.map ~kind:"unknown-keep" (fun m imap -> make m, imap)
-    |> Jsont.Obj.mem "m" Jsont.bool ~enc:(fun (v, _) -> m v)
-    |> Jsont.Obj.keep_unknown unknown ~enc:snd
-    |> Jsont.Obj.finish
+    let unknown = Jsont.Object.Mems.string_map Jsont.int in
+    Jsont.Object.map ~kind:"unknown-keep" (fun m imap -> make m, imap)
+    |> Jsont.Object.mem "m" Jsont.bool ~enc:(fun (v, _) -> m v)
+    |> Jsont.Object.keep_unknown unknown ~enc:snd
+    |> Jsont.Object.finish
 end
 
 module Unknown_data = struct
@@ -107,11 +107,11 @@ module Cases = struct
       let book_count a = a.book_count
       let pseudo a = a.pseudo
       let jsont =
-        Jsont.Obj.map ~kind:"Author" make
-        |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-        |> Jsont.Obj.mem "book_count" Jsont.int ~enc:book_count
-        |> Jsont.Obj.mem "pseudo" Jsont.string ~enc:pseudo
-        |> Jsont.Obj.finish
+        Jsont.Object.map ~kind:"Author" make
+        |> Jsont.Object.mem "name" Jsont.string ~enc:name
+        |> Jsont.Object.mem "book_count" Jsont.int ~enc:book_count
+        |> Jsont.Object.mem "pseudo" Jsont.string ~enc:pseudo
+        |> Jsont.Object.finish
     end
 
     module Editor = struct
@@ -120,10 +120,10 @@ module Cases = struct
       let name e = e.name
       let publisher e = e.publisher
       let jsont =
-        Jsont.Obj.map ~kind:"Editor" make
-        |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-        |> Jsont.Obj.mem "publisher" Jsont.string ~enc:publisher
-        |> Jsont.Obj.finish
+        Jsont.Object.map ~kind:"Editor" make
+        |> Jsont.Object.mem "name" Jsont.string ~enc:name
+        |> Jsont.Object.mem "publisher" Jsont.string ~enc:publisher
+        |> Jsont.Object.finish
     end
 
     type t = Author of Author.t | Editor of Editor.t
@@ -132,17 +132,17 @@ module Cases = struct
     let editor e = Editor e
 
     let jsont =
-      let case_a = Jsont.Obj.Case.map "author" Author.jsont ~dec:author in
-      let case_e = Jsont.Obj.Case.map "editor" Editor.jsont ~dec:editor in
-      let cases = Jsont.Obj.Case.[make case_a; make case_e] in
+      let case_a = Jsont.Object.Case.map "author" Author.jsont ~dec:author in
+      let case_e = Jsont.Object.Case.map "editor" Editor.jsont ~dec:editor in
+      let cases = Jsont.Object.Case.[make case_a; make case_e] in
       let enc_case = function
-      | Author a -> Jsont.Obj.Case.value case_a a
-      | Editor e -> Jsont.Obj.Case.value case_e e
+      | Author a -> Jsont.Object.Case.value case_a a
+      | Editor e -> Jsont.Object.Case.value case_e e
       in
-      Jsont.Obj.map ~kind:"Person" Fun.id
-      |> Jsont.Obj.case_mem "type"
+      Jsont.Object.map ~kind:"Person" Fun.id
+      |> Jsont.Object.case_mem "type"
           Jsont.string ~tag_to_string:Fun.id ~enc:Fun.id ~enc_case cases
-      |> Jsont.Obj.finish
+      |> Jsont.Object.finish
   end
 
   module Person_field = struct (* Variant in a field *)
@@ -151,18 +151,18 @@ module Cases = struct
     let pseudo a = a.pseudo
     let book_count a = a.book_count
     let author_jsont =
-      Jsont.Obj.map ~kind:"Author" make_author
-      |> Jsont.Obj.mem "pseudo" Jsont.string ~enc:pseudo
-      |> Jsont.Obj.mem "book_count" Jsont.int ~enc:book_count
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"Author" make_author
+      |> Jsont.Object.mem "pseudo" Jsont.string ~enc:pseudo
+      |> Jsont.Object.mem "book_count" Jsont.int ~enc:book_count
+      |> Jsont.Object.finish
 
     type editor = { publisher : string; }
     let make_editor publisher = { publisher }
     let publisher e = e.publisher
     let editor_jsont =
-      Jsont.Obj.map ~kind:"Editor" make_editor
-      |> Jsont.Obj.mem "publisher" Jsont.string ~enc:publisher
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"Editor" make_editor
+      |> Jsont.Object.mem "publisher" Jsont.string ~enc:publisher
+      |> Jsont.Object.finish
 
     type type' = Author of author | Editor of editor
     let author a = Author a
@@ -174,35 +174,35 @@ module Cases = struct
     let name v = v.name
 
     let jsont =
-      let case_a = Jsont.Obj.Case.map "author" author_jsont ~dec:author in
-      let case_e = Jsont.Obj.Case.map "editor" editor_jsont ~dec:editor in
-      let cases = Jsont.Obj.Case.[make case_a; make case_e] in
+      let case_a = Jsont.Object.Case.map "author" author_jsont ~dec:author in
+      let case_e = Jsont.Object.Case.map "editor" editor_jsont ~dec:editor in
+      let cases = Jsont.Object.Case.[make case_a; make case_e] in
       let enc_case = function
-      | Author a -> Jsont.Obj.Case.value case_a a
-      | Editor e -> Jsont.Obj.Case.value case_e e
+      | Author a -> Jsont.Object.Case.value case_a a
+      | Editor e -> Jsont.Object.Case.value case_e e
       in
-      Jsont.Obj.map ~kind:"Person" make
-      |> Jsont.Obj.case_mem "type"
+      Jsont.Object.map ~kind:"Person" make
+      |> Jsont.Object.case_mem "type"
         ~tag_to_string:Fun.id Jsont.string ~enc:type' ~enc_case cases
-      |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-      |> Jsont.Obj.finish
+      |> Jsont.Object.mem "name" Jsont.string ~enc:name
+      |> Jsont.Object.finish
   end
 
   module Keep_unknown = struct
     type a = string String_map.t
     let a_jsont =
-      let unknown = Jsont.Obj.Mems.string_map Jsont.string in
-      Jsont.Obj.map ~kind:"A" Fun.id
-      |> Jsont.Obj.keep_unknown unknown ~enc:Fun.id
-      |> Jsont.Obj.finish
+      let unknown = Jsont.Object.Mems.string_map Jsont.string in
+      Jsont.Object.map ~kind:"A" Fun.id
+      |> Jsont.Object.keep_unknown unknown ~enc:Fun.id
+      |> Jsont.Object.finish
 
     type b = { name : string }
     let name b = b.name
     let b_jsont =
-      Jsont.Obj.map ~kind:"B" (fun name -> { name })
-      |> Jsont.Obj.mem "name" Jsont.string ~enc:name
-      |> Jsont.Obj.error_unknown
-      |> Jsont.Obj.finish
+      Jsont.Object.map ~kind:"B" (fun name -> { name })
+      |> Jsont.Object.mem "name" Jsont.string ~enc:name
+      |> Jsont.Object.error_unknown
+      |> Jsont.Object.finish
 
     type type' = A of a | B of b
     let a a = A a
@@ -223,18 +223,18 @@ module Cases = struct
     let pp ppf v = B0_std.Fmt.string ppf "<value>"
 
     let jsont =
-      let case_a = Jsont.Obj.Case.map "A" a_jsont ~dec:a in
-      let case_b = Jsont.Obj.Case.map "B" b_jsont ~dec:b in
-      let cases = Jsont.Obj.Case.[make case_a; make case_b] in
+      let case_a = Jsont.Object.Case.map "A" a_jsont ~dec:a in
+      let case_b = Jsont.Object.Case.map "B" b_jsont ~dec:b in
+      let cases = Jsont.Object.Case.[make case_a; make case_b] in
       let enc_case = function
-      | A a -> Jsont.Obj.Case.value case_a a
-      | B b -> Jsont.Obj.Case.value case_b b
+      | A a -> Jsont.Object.Case.value case_a a
+      | B b -> Jsont.Object.Case.value case_b b
       in
-      Jsont.Obj.map ~kind:"Keep_unknown" make
-      |> Jsont.Obj.case_mem "type"
+      Jsont.Object.map ~kind:"Keep_unknown" make
+      |> Jsont.Object.case_mem "type"
         ~tag_to_string:Fun.id Jsont.string ~enc:type' ~enc_case cases
-      |> Jsont.Obj.keep_unknown Jsont.json_mems ~enc:unknown
-      |> Jsont.Obj.finish
+      |> Jsont.Object.keep_unknown Jsont.json_mems ~enc:unknown
+      |> Jsont.Object.finish
   end
 
 end
@@ -277,8 +277,8 @@ module Cases_data = struct
 
   let unknown_a_value =
     let unknown =
-      Jsont.Json.(obj [mem (name "m0") (string "o");
-                       mem (name "m1") (string "n")])
+      Jsont.Json.(object' [mem (name "m0") (string "o");
+                           mem (name "m1") (string "n")])
     in
     Cases.Keep_unknown.make (A String_map.empty) unknown
 
@@ -291,13 +291,13 @@ module Cases_data = struct
   let unknown_a_no_a_unknown = "{\n  \"type\": \"A\"\n}"
   let unknown_a_no_a_unknown_value =
     (* Since the map should be ignored since the case object overides it *)
-    let unknown = Jsont.Json.obj [] in
+    let unknown = Jsont.Json.object' [] in
     Cases.Keep_unknown.make (A String_map.(empty |> add "bli" "bla")) unknown
 
   let unknown_b_value =
     let unknown =
-      Jsont.Json.(obj [mem (name "m1") (string "v1");
-                       mem (name "m2") (number 0.0)])
+      Jsont.Json.(object' [mem (name "m1") (string "v1");
+                           mem (name "m2") (number 0.0)])
     in
     Cases.Keep_unknown.make (B { name = "ha" }) unknown
 end
@@ -328,14 +328,14 @@ module Tree = struct
         let value = function Node (_, v, _) -> v | _ -> not_a_node () in
         let left = function Node (l, _, _) -> l | _ -> not_a_node () in
         let right = function Node (_, _, r) -> r | _ -> not_a_node () in
-        Jsont.Obj.map ~kind:"node" (fun l v r -> Node (l, v, r))
-        |> Jsont.Obj.mem ~enc:left "left" (Jsont.rec' tree)
-        |> Jsont.Obj.mem ~enc:value "value" t
-        |> Jsont.Obj.mem ~enc:right "right" (Jsont.rec' tree)
-        |> Jsont.Obj.finish
+        Jsont.Object.map ~kind:"node" (fun l v r -> Node (l, v, r))
+        |> Jsont.Object.mem ~enc:left "left" (Jsont.rec' tree)
+        |> Jsont.Object.mem ~enc:value "value" t
+        |> Jsont.Object.mem ~enc:right "right" (Jsont.rec' tree)
+        |> Jsont.Object.finish
       in
       let enc = function Empty -> empty | Node _ -> node in
-      Jsont.any ~kind:"tree" ~dec_null:empty ~dec_obj:node ~enc ()
+      Jsont.any ~kind:"tree" ~dec_null:empty ~dec_object:node ~enc ()
     end
     in
     Lazy.force tree
@@ -351,28 +351,28 @@ module Tree = struct
 
   let jsont_with_cases t =
     let rec tree = lazy begin
-      let leaf_jsont = Jsont.Obj.map Empty |> Jsont.Obj.finish in
+      let leaf_jsont = Jsont.Object.map Empty |> Jsont.Object.finish in
       let node_jsont =
         let not_a_node () = failwith "not a node" in
         let value = function Node (_, v, _) -> v | _ -> not_a_node () in
         let left = function Node (l, _, _) -> l | _ -> not_a_node () in
         let right = function Node (_, _, r) -> r | _ -> not_a_node () in
-        Jsont.Obj.map (fun l v r -> Node (l, v, r))
-        |> Jsont.Obj.mem ~enc:left "left" (Jsont.rec' tree)
-        |> Jsont.Obj.mem ~enc:value "value" t
-        |> Jsont.Obj.mem ~enc:right "right" (Jsont.rec' tree)
-        |> Jsont.Obj.finish
+        Jsont.Object.map (fun l v r -> Node (l, v, r))
+        |> Jsont.Object.mem ~enc:left "left" (Jsont.rec' tree)
+        |> Jsont.Object.mem ~enc:value "value" t
+        |> Jsont.Object.mem ~enc:right "right" (Jsont.rec' tree)
+        |> Jsont.Object.finish
       in
-      let case_leaf = Jsont.Obj.Case.map "empty" leaf_jsont ~dec:Fun.id in
-      let case_node = Jsont.Obj.Case.map "node" node_jsont ~dec:Fun.id in
+      let case_leaf = Jsont.Object.Case.map "empty" leaf_jsont ~dec:Fun.id in
+      let case_node = Jsont.Object.Case.map "node" node_jsont ~dec:Fun.id in
       let enc_case = function
-      | Empty as v -> Jsont.Obj.Case.value case_leaf v
-      | Node _ as v -> Jsont.Obj.Case.value case_node v
+      | Empty as v -> Jsont.Object.Case.value case_leaf v
+      | Node _ as v -> Jsont.Object.Case.value case_node v
       in
-      let cases = Jsont.Obj.Case.[ make case_leaf; make case_node ] in
-      Jsont.Obj.map ~kind:"tree" Fun.id
-      |> Jsont.Obj.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
-      |> Jsont.Obj.finish
+      let cases = Jsont.Object.Case.[ make case_leaf; make case_node ] in
+      Jsont.Object.map ~kind:"tree" Fun.id
+      |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
+      |> Jsont.Object.finish
     end
     in
     Lazy.force tree

@@ -16,7 +16,6 @@
    Feature objects. We handle this by redoing the cases to handle only
    the subsets. *)
 
-
 module Bbox = struct
   type t = float array
   let jsont = Jsont.(array ~kind:"Bbox" number)
@@ -40,13 +39,13 @@ module Geojson_object = struct
 
   let finish_jsont map =
     map
-    |> Jsont.Obj.opt_mem "bbox" Bbox.jsont ~enc:bbox
-    |> Jsont.Obj.keep_unknown Jsont.json_mems ~enc:unknown
-    |> Jsont.Obj.finish
+    |> Jsont.Object.opt_mem "bbox" Bbox.jsont ~enc:bbox
+    |> Jsont.Object.keep_unknown Jsont.json_mems ~enc:unknown
+    |> Jsont.Object.finish
 
   let geometry ~kind coordinates =
-    Jsont.Obj.map ~kind make
-    |> Jsont.Obj.mem "coordinates" coordinates ~enc:type'
+    Jsont.Object.map ~kind make
+    |> Jsont.Object.mem "coordinates" coordinates ~enc:type'
     |> finish_jsont
 end
 
@@ -150,7 +149,7 @@ module Geojson = struct
   (* The first two Json types below handle subtyping by redoing
      cases for subsets of types.  *)
 
-  let case_map obj dec = Jsont.Obj.Case.map (Jsont.kind obj) obj ~dec
+  let case_map obj dec = Jsont.Object.Case.map (Jsont.kind obj) obj ~dec
 
   let rec geometry_jsont = lazy begin
     let case_point = case_map Point.jsont point in
@@ -165,56 +164,57 @@ module Geojson = struct
       case_map (Lazy.force geometry_collection_jsont) geometry_collection
     in
     let enc_case = function
-    | `Point v -> Jsont.Obj.Case.value case_point v
-    | `Multi_point v -> Jsont.Obj.Case.value case_multi_point v
-    | `Line_string v -> Jsont.Obj.Case.value case_line_string v
-    | `Multi_line_string v -> Jsont.Obj.Case.value case_multi_line_string v
-    | `Polygon v -> Jsont.Obj.Case.value case_polygon v
-    | `Multi_polygon v -> Jsont.Obj.Case.value case_multi_polygon v
-    | `Geometry_collection v -> Jsont.Obj.Case.value case_geometry_collection v
+    | `Point v -> Jsont.Object.Case.value case_point v
+    | `Multi_point v -> Jsont.Object.Case.value case_multi_point v
+    | `Line_string v -> Jsont.Object.Case.value case_line_string v
+    | `Multi_line_string v -> Jsont.Object.Case.value case_multi_line_string v
+    | `Polygon v -> Jsont.Object.Case.value case_polygon v
+    | `Multi_polygon v -> Jsont.Object.Case.value case_multi_polygon v
+    | `Geometry_collection v ->
+        Jsont.Object.Case.value case_geometry_collection v
     in
-    let cases = Jsont.Obj.Case.[
+    let cases = Jsont.Object.Case.[
         make case_point; make case_multi_point; make case_line_string;
         make case_multi_line_string; make case_polygon; make case_multi_polygon;
         make case_geometry_collection ]
     in
-    Jsont.Obj.map ~kind:"Geometry object" Fun.id
-    |> Jsont.Obj.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
+    Jsont.Object.map ~kind:"Geometry object" Fun.id
+    |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
       ~tag_to_string:Fun.id
-    |> Jsont.Obj.finish
+    |> Jsont.Object.finish
   end
 
   and feature_jsont : Feature.t object' Jsont.t Lazy.t = lazy begin
     let case_feature = case_map (Lazy.force case_feature_jsont) Fun.id in
-    let enc_case v = Jsont.Obj.Case.value case_feature v in
-    let cases = Jsont.Obj.Case.[ make case_feature ] in
-    Jsont.Obj.map ~kind:"Feature" Fun.id
-    |> Jsont.Obj.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
+    let enc_case v = Jsont.Object.Case.value case_feature v in
+    let cases = Jsont.Object.Case.[ make case_feature ] in
+    Jsont.Object.map ~kind:"Feature" Fun.id
+    |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
       ~tag_to_string:Fun.id
-    |> Jsont.Obj.finish
+    |> Jsont.Object.finish
   end
 
   and case_feature_jsont : Feature.t object' Jsont.t Lazy.t = lazy begin
-    Jsont.Obj.map ~kind:"Feature" Feature.make_geojson_object
-    |> Jsont.Obj.opt_mem "id" feature_id_jsont
+    Jsont.Object.map ~kind:"Feature" Feature.make_geojson_object
+    |> Jsont.Object.opt_mem "id" feature_id_jsont
       ~enc:(fun o -> Feature.id (Geojson_object.type' o))
-    |> Jsont.Obj.mem "geometry" (Jsont.option (Jsont.rec' geometry_jsont))
+    |> Jsont.Object.mem "geometry" (Jsont.option (Jsont.rec' geometry_jsont))
       ~enc:(fun o -> Feature.geometry (Geojson_object.type' o))
-    |> Jsont.Obj.mem "properties" (Jsont.option Jsont.json_obj)
+    |> Jsont.Object.mem "properties" (Jsont.option Jsont.json_object)
       ~enc:(fun o -> Feature.properties (Geojson_object.type' o))
     |> Geojson_object.finish_jsont
   end
 
   and geometry_collection_jsont = lazy begin
-    Jsont.Obj.map ~kind:"GeometryCollection" Geojson_object.make
-    |> Jsont.Obj.mem "geometries" (Jsont.list (Jsont.rec' geometry_jsont))
+    Jsont.Object.map ~kind:"GeometryCollection" Geojson_object.make
+    |> Jsont.Object.mem "geometries" (Jsont.list (Jsont.rec' geometry_jsont))
       ~enc:Geojson_object.type'
     |> Geojson_object.finish_jsont
   end
 
   and feature_collection_json = lazy begin
-    Jsont.Obj.map ~kind:"FeatureCollection" Geojson_object.make
-    |> Jsont.Obj.mem "features" Jsont.(list (Jsont.rec' feature_jsont))
+    Jsont.Object.map ~kind:"FeatureCollection" Geojson_object.make
+    |> Jsont.Object.mem "features" Jsont.(list (Jsont.rec' feature_jsont))
       ~enc:Geojson_object.type'
     |> Geojson_object.finish_jsont
   end
@@ -236,26 +236,27 @@ module Geojson = struct
       case_map (Lazy.force feature_collection_json) feature_collection
     in
     let enc_case = function
-    | `Point v -> Jsont.Obj.Case.value case_point v
-    | `Multi_point v -> Jsont.Obj.Case.value case_multi_point v
-    | `Line_string v -> Jsont.Obj.Case.value case_line_string v
-    | `Multi_line_string v -> Jsont.Obj.Case.value case_multi_line_string v
-    | `Polygon v -> Jsont.Obj.Case.value case_polygon v
-    | `Multi_polygon v -> Jsont.Obj.Case.value case_multi_polygon v
-    | `Geometry_collection v -> Jsont.Obj.Case.value case_geometry_collection v
-    | `Feature v -> Jsont.Obj.Case.value case_feature v
-    | `Feature_collection v -> Jsont.Obj.Case.value case_feature_collection v
+    | `Point v -> Jsont.Object.Case.value case_point v
+    | `Multi_point v -> Jsont.Object.Case.value case_multi_point v
+    | `Line_string v -> Jsont.Object.Case.value case_line_string v
+    | `Multi_line_string v -> Jsont.Object.Case.value case_multi_line_string v
+    | `Polygon v -> Jsont.Object.Case.value case_polygon v
+    | `Multi_polygon v -> Jsont.Object.Case.value case_multi_polygon v
+    | `Geometry_collection v ->
+        Jsont.Object.Case.value case_geometry_collection v
+    | `Feature v -> Jsont.Object.Case.value case_feature v
+    | `Feature_collection v -> Jsont.Object.Case.value case_feature_collection v
     in
-    let cases = Jsont.Obj.Case.[
+    let cases = Jsont.Object.Case.[
         make case_point; make case_multi_point; make case_line_string;
         make case_multi_line_string; make case_polygon; make case_multi_polygon;
         make case_geometry_collection; make case_feature;
         make case_feature_collection ]
     in
-    Jsont.Obj.map ~kind:"GeoJSON" Fun.id
-    |> Jsont.Obj.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
+    Jsont.Object.map ~kind:"GeoJSON" Fun.id
+    |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
       ~tag_to_string:Fun.id
-    |> Jsont.Obj.finish
+    |> Jsont.Object.finish
   end
 
   let jsont = Lazy.force jsont
@@ -278,11 +279,12 @@ let with_infile file f = (* XXX add something to bytesrw. *)
   | file -> In_channel.with_open_bin file (process file)
   with Sys_error e -> Error e
 
-let trip ~file ~format ~locs =
+let trip ~file ~format ~locs ~dec_only =
   log_if_error ~use:1 @@
   with_infile file @@ fun r ->
   log_if_error ~use:1 @@
   let* t = Jsont_bytesrw.decode ~file ~locs Geojson.jsont r in
+  if dec_only then Ok 0 else
   let w = Bytesrw.Bytes.Writer.of_out_channel stdout in
   let* () = Jsont_bytesrw.encode ~format ~eod:true Geojson.jsont t w in
   Ok 0
@@ -303,8 +305,11 @@ let geojson =
     let doc = strf "Output style. Must be %s." (Arg.doc_alts_enum fmt)in
     Arg.(value & opt (enum fmt) Jsont.Minify &
          info ["f"; "format"] ~doc ~docv:"FMT")
+  and+ dec_only =
+    let doc = "Decode only." in
+    Arg.(value & flag & info ["d"] ~doc)
   in
-  trip ~file ~format ~locs
+  trip ~file ~format ~locs ~dec_only
 
 let main () = Cmd.eval' geojson
 let () = if !Sys.interactive then () else exit (main ())

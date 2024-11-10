@@ -89,10 +89,10 @@ module Path = struct
 end
 
 module Sort = struct
-  type t = Null | Bool | Number | String | Array | Obj
+  type t = Null | Bool | Number | String | Array | Object
   let to_string = function
   | Null -> "null" | Bool -> "bool" | Number -> "number"
-  | String  -> "string" | Array  -> "array" | Obj -> "object"
+  | String  -> "string" | Array  -> "array" | Object -> "object"
 
   let pp ppf s = Fmt.code ppf (to_string s)
 end
@@ -153,33 +153,33 @@ module Error = struct
   let kind meta ~exp ~fnd =
     msgf meta "Expected %a but found %a" Fmt.code exp Sort.pp fnd
 
-  let missing_mems meta ~obj_kind ~exp ~fnd =
+  let missing_mems meta ~object_kind ~exp ~fnd =
     let pp_miss ppf m =
       Fmt.pf ppf "@[%a%a@]" Fmt.code m Fmt.similar_mems (m, fnd)
     in
     match exp with
     | [n] ->
         msgf meta "@[<v>Missing member %a in %a%a@]"
-          Fmt.code n Fmt.code obj_kind Fmt.similar_mems (n, fnd)
+          Fmt.code n Fmt.code object_kind Fmt.similar_mems (n, fnd)
     | exp ->
         msgf meta "@[<v1>Missing members in %a:@,%a@]"
-          Fmt.code obj_kind (Fmt.list pp_miss) exp
+          Fmt.code object_kind (Fmt.list pp_miss) exp
 
-  let unexpected_mems meta ~obj_kind ~exp ~fnd =
+  let unexpected_mems meta ~object_kind ~exp ~fnd =
     let pp_unexp ppf m =
       Fmt.pf ppf " @[%a%a@]" Fmt.code m Fmt.should_it_be_mem (m, exp)
     in
     match fnd with
     | [(u, _)] -> (* TODO use the name metas *)
         msgf meta "@[<v>Unexpected member %a for %a%a@]"
-          Fmt.code u Fmt.code obj_kind Fmt.should_it_be_mem (u, exp)
+          Fmt.code u Fmt.code object_kind Fmt.should_it_be_mem (u, exp)
     | us ->
         msgf meta "@[<v1>Unexpected members for %a:@,%a@]"
-          Fmt.code obj_kind (Fmt.list pp_unexp) (List.map fst us)
+          Fmt.code object_kind (Fmt.list pp_unexp) (List.map fst us)
 
-  let unexpected_case_tag meta ~obj_kind ~mem_name ~exp ~fnd =
+  let unexpected_case_tag meta ~object_kind ~mem_name ~exp ~fnd =
     let pp_kind ppf () =
-      Fmt.pf ppf "member %a value in %a" Fmt.code mem_name Fmt.code obj_kind
+      Fmt.pf ppf "member %a value in %a" Fmt.code mem_name Fmt.code object_kind
     in
     msgf meta "@[%a@]" (Fmt.out_of_dom ~pp_kind ()) (fnd, exp)
 
@@ -212,7 +212,7 @@ module Repr = struct (* See the .mli for documentation *)
   | Number : (float, 'a) base_map -> 'a t
   | String : (string, 'a) base_map -> 'a t
   | Array : ('a, 'elt, 'builder) array_map -> 'a t
-  | Obj : ('o, 'o) obj_map -> 'o t
+  | Object : ('o, 'o) object_map -> 'o t
   | Any : 'a any_map -> 'a t
   | Map : ('a, 'b) map -> 'b t
   | Rec : 'a t Lazy.t -> 'a t
@@ -228,14 +228,14 @@ module Repr = struct (* See the .mli for documentation *)
     enc : 'acc. ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc;
     enc_meta : 'array -> Meta.t; }
 
-  and ('o, 'dec) obj_map =
+  and ('o, 'dec) object_map =
   { kind : string;
     doc : string;
     dec : ('o, 'dec) dec_fun;
     mem_decs : mem_dec String_map.t;
     mem_encs : 'o mem_enc list;
     enc_meta : 'o -> Meta.t;
-    shape : 'o obj_shape; }
+    shape : 'o object_shape; }
 
   and mem_dec = Mem_dec : ('o, 'a) mem_map -> mem_dec
   and 'o mem_enc = Mem_enc : ('o, 'a) mem_map -> 'o mem_enc
@@ -249,11 +249,11 @@ module Repr = struct (* See the .mli for documentation *)
     enc_meta : 'a -> Meta.t;
     enc_omit : 'a -> bool; }
 
-  and 'o obj_shape =
-  | Obj_basic : ('o, 'mems, 'builder) unknown_mems -> 'o obj_shape
-  | Obj_cases :
+  and 'o object_shape =
+  | Object_basic : ('o, 'mems, 'builder) unknown_mems -> 'o object_shape
+  | Object_cases :
       ('o, 'mems, 'builder) unknown_mems option *
-      ('o, 'cases, 'tag) obj_cases -> 'o obj_shape
+      ('o, 'cases, 'tag) object_cases -> 'o object_shape
 
   and ('o, 'mems, 'builder) unknown_mems =
   | Unknown_skip : ('o, unit, unit) unknown_mems
@@ -273,7 +273,7 @@ module Repr = struct (* See the .mli for documentation *)
     enc :
       'acc. (Meta.t -> string -> 'a -> 'acc -> 'acc) -> 'mems -> 'acc -> 'acc }
 
-  and ('o, 'cases, 'tag) obj_cases =
+  and ('o, 'cases, 'tag) object_cases =
   { tag : ('tag, 'tag) mem_map;
     tag_compare : 'tag -> 'tag -> int;
     tag_to_string : ('tag -> string) option;
@@ -284,7 +284,7 @@ module Repr = struct (* See the .mli for documentation *)
 
   and ('cases, 'case, 'tag) case_map =
   { tag : 'tag;
-    obj_map : ('case, 'case) obj_map;
+    object_map : ('case, 'case) object_map;
     dec : 'case -> 'cases; }
 
   and ('cases, 'tag) case_value =
@@ -302,7 +302,7 @@ module Repr = struct (* See the .mli for documentation *)
     dec_number : 'a t option;
     dec_string : 'a t option;
     dec_array : 'a t option;
-    dec_obj : 'a t option;
+    dec_object : 'a t option;
     enc : 'a -> 'a t; }
 
   and ('a, 'b) map =
@@ -331,7 +331,7 @@ module Repr = struct (* See the .mli for documentation *)
   | Number map -> sort_kind ~kind:map.kind ~sort:Number
   | String map -> sort_kind ~kind:map.kind ~sort:String
   | Array map -> array_kind ~kind:map.kind map.elt
-  | Obj map -> sort_kind ~kind:map.kind ~sort:Obj
+  | Object map -> sort_kind ~kind:map.kind ~sort:Object
   | Any map -> if map.kind = "" then any_map_kind map else map.kind
   | Map map -> if map.kind = "" then value_kind map.dom else map.kind
   | Rec l -> value_kind (Lazy.force l)
@@ -348,7 +348,7 @@ module Repr = struct (* See the .mli for documentation *)
          then value_kind k else sort_kind ~kind:map.kind ~sort)
         :: ks
     in
-    let ks = add_case [] Obj map.dec_obj in
+    let ks = add_case [] Object map.dec_object in
     let ks = add_case ks Array map.dec_array in
     let ks = add_case ks String map.dec_string in
     let ks = add_case ks Number map.dec_number in
@@ -362,53 +362,53 @@ module Repr = struct (* See the .mli for documentation *)
   | Number map -> kind_or_sort ~kind:map.kind ~sort:Number
   | String map -> kind_or_sort ~kind:map.kind ~sort:String
   | Array map -> kind_or_sort ~kind:map.kind ~sort:Array
-  | Obj map -> kind_or_sort ~kind:map.kind ~sort:Obj
+  | Object map -> kind_or_sort ~kind:map.kind ~sort:Object
   | Any map -> if map.kind <> "" then map.kind else "any"
   | Map map -> if map.kind <> "" then map.kind else kind map.dom
   | Rec l -> kind (Lazy.force l)
 
   let rec doc : type a. a t -> string = function
   | Null map -> map.doc | Bool map -> map.doc | Number map -> map.doc
-  | String map -> map.doc | Array map -> map.doc | Obj map -> map.doc
+  | String map -> map.doc | Array map -> map.doc | Object map -> map.doc
   | Any map -> map.doc | Map map -> map.doc | Rec l -> doc (Lazy.force l)
 
   let array_map_value_kind map = array_kind ~kind:map.kind map.elt
-  let obj_map_value_kind (map : ('o, 'dec) obj_map) =
-    sort_kind ~kind:map.kind ~sort:Obj
+  let object_map_value_kind (map : ('o, 'dec) object_map) =
+    sort_kind ~kind:map.kind ~sort:Object
 
   let type_error meta t ~fnd = Error.kind meta ~exp:(value_kind t) ~fnd
 
-  let missing_mems_error meta (obj_map : ('o, 'o) obj_map) ~exp ~fnd =
-    let obj_kind = obj_map_value_kind obj_map in
+  let missing_mems_error meta (object_map : ('o, 'o) object_map) ~exp ~fnd =
+    let object_kind = object_map_value_kind object_map in
     let exp =
       let add n (Mem_dec m) acc = match m.dec_absent with
       | None -> n :: acc | Some _ -> acc
       in
       List.rev (String_map.fold add exp [])
     in
-    Error.missing_mems meta ~obj_kind ~exp ~fnd
+    Error.missing_mems meta ~object_kind ~exp ~fnd
 
-  let unexpected_mems_error meta (obj_map : ('o, 'o) obj_map) ~fnd =
+  let unexpected_mems_error meta (object_map : ('o, 'o) object_map) ~fnd =
     (* FIXME context ? *)
-    let obj_kind = obj_map_value_kind obj_map in
-    let exp = List.map (fun (Mem_enc m) -> m.name) obj_map.mem_encs in
-    Error.unexpected_mems meta ~obj_kind ~exp ~fnd
+    let object_kind = object_map_value_kind object_map in
+    let exp = List.map (fun (Mem_enc m) -> m.name) object_map.mem_encs in
+    Error.unexpected_mems meta ~object_kind ~exp ~fnd
 
-  let unexpected_case_tag_error meta obj_map obj_cases tag =
+  let unexpected_case_tag_error meta object_map object_cases tag =
     (* FIXME context *)
-    let obj_kind = obj_map_value_kind obj_map in
-    let case_to_string (Case c) = match obj_cases.tag_to_string with
+    let object_kind = object_map_value_kind object_map in
+    let case_to_string (Case c) = match object_cases.tag_to_string with
     | None -> None | Some str -> Some (str c.tag)
     in
-    let exp = List.filter_map case_to_string obj_cases.cases in
-    let fnd = match obj_cases.tag_to_string with
+    let exp = List.filter_map case_to_string object_cases.cases in
+    let fnd = match object_cases.tag_to_string with
     | None -> "<value>" (* FIXME not good *) | Some str -> str tag
     in
-    let mem_name = obj_cases.tag.name in
-    Error.unexpected_case_tag meta ~obj_kind ~mem_name ~exp ~fnd
+    let mem_name = object_cases.tag.name in
+    Error.unexpected_case_tag meta ~object_kind ~mem_name ~exp ~fnd
 
   let error_push_object meta map name e =
-    Error.push_object ((obj_map_value_kind map), meta) name e
+    Error.push_object ((object_map_value_kind map), meta) name e
 
   let error_push_array meta map i e =
     Error.push_array ((array_map_value_kind map), meta) i e
@@ -437,7 +437,7 @@ module Repr = struct (* See the .mli for documentation *)
   | Dec_fun f -> f
   | Dec_app (f, arg) -> (apply_dict f dict) (Option.get (Dict.find arg dict))
 
-  let obj_meta_arg : Meta.t Type.Id.t = Type.Id.make ()
+  let object_meta_arg : Meta.t Type.Id.t = Type.Id.make ()
 
   type unknown_mems_option =
   | Unknown_mems :
@@ -456,7 +456,7 @@ module Repr = struct (* See the .mli for documentation *)
       | _ -> by, dict
 
   let finish_object_decode : type o p m mems builder.
-    (o, o) obj_map -> Meta.t -> (p, mems, builder) unknown_mems -> builder ->
+    (o, o) object_map -> Meta.t -> (p, mems, builder) unknown_mems -> builder ->
     mem_dec String_map.t -> Dict.t -> Dict.t
     =
     fun map meta umems umap mem_decs dict ->
@@ -601,9 +601,8 @@ module Array = struct
     array (map ~kind ~dec_empty ~dec_skip ~dec_add ~dec_finish ~enc stub)
 end
 
-module Obj = struct
+module Object = struct
   module Mem = struct
-    type nonrec ('o, 'dec) obj_map = ('o, 'dec) obj_map
     type ('o, 'a) map = ('o, 'a) mem_map
 
     let noenc name = fun _v ->
@@ -620,24 +619,24 @@ module Obj = struct
       in
       { name; doc; type'; id; dec_absent; enc; enc_omit; enc_meta }
 
-    let app obj_map mm =
-      let mem_decs = String_map.add mm.name (Mem_dec mm) obj_map.mem_decs in
-      let mem_encs = Mem_enc mm :: obj_map.mem_encs in
-      let dec = Dec_app (obj_map.dec, mm.id) in
-      { obj_map with dec; mem_decs; mem_encs }
+    let app object_map mm =
+      let mem_decs = String_map.add mm.name (Mem_dec mm) object_map.mem_decs in
+      let mem_encs = Mem_enc mm :: object_map.mem_encs in
+      let dec = Dec_app (object_map.dec, mm.id) in
+      { object_map with dec; mem_decs; mem_encs }
   end
 
-  type ('o, 'dec) map = ('o, 'dec) obj_map
+  type ('o, 'dec) map = ('o, 'dec) object_map
 
-  let kind = Repr.obj_map_value_kind (* FIXME *)
+  let kind = Repr.object_map_value_kind (* FIXME *)
   let map ?(kind = "") ?(doc = "") dec =
-    { kind; doc; dec = Dec_fun dec; mem_decs = String_map.empty;
-      mem_encs = []; enc_meta = enc_meta_none; shape = Obj_basic Unknown_skip }
+    { kind; doc; dec = Dec_fun dec; mem_decs = String_map.empty; mem_encs = [];
+      enc_meta = enc_meta_none; shape = Object_basic Unknown_skip }
 
   let map' ?(kind = "") ?(doc = "") ?(enc_meta = enc_meta_none) dec =
-    let dec = Dec_app (Dec_fun dec, obj_meta_arg) in
+    let dec = Dec_app (Dec_fun dec, object_meta_arg) in
     { kind; doc; dec; mem_decs = String_map.empty;
-      mem_encs = []; enc_meta; shape = Obj_basic Unknown_skip }
+      mem_encs = []; enc_meta; shape = Object_basic Unknown_skip }
 
   let enc_only ?(kind = "") ?(doc = "") ?(enc_meta = enc_meta_none) () =
     let dec meta =
@@ -645,9 +644,9 @@ module Obj = struct
       let kind = if kind = "" then "object" else kind in
       Error.msg meta ("No decoder for " ^ kind)
     in
-    let dec = Dec_app (Dec_fun dec, obj_meta_arg) in
+    let dec = Dec_app (Dec_fun dec, object_meta_arg) in
     { kind; doc; dec; mem_decs = String_map.empty;
-      mem_encs = []; enc_meta; shape = Obj_basic Unknown_skip }
+      mem_encs = []; enc_meta; shape = Object_basic Unknown_skip }
 
   let check_name_unicity m =
     let add n kind = function
@@ -657,16 +656,18 @@ module Obj = struct
         invalid_arg @@
         Fmt.str "member %s defined both in %s and %s" n (ks kind) (ks kind')
     in
-    let rec loop : type o dec. string String_map.t -> (o, dec) obj_map -> unit =
+    let rec loop :
+      type o dec. string String_map.t -> (o, dec) object_map -> unit
+      =
     fun names m ->
       let add_name names n = String_map.update n (add n m.kind) names in
       let add_mem_enc names (Mem_enc m) = add_name names m.name in
       let names = List.fold_left add_mem_enc names m.mem_encs in
       match m.shape with
-      | Obj_basic _ -> ()
-      | Obj_cases (u, cases) ->
+      | Object_basic _ -> ()
+      | Object_cases (u, cases) ->
           let names = add_name names cases.tag.name in
-          let check_case (Case c) = loop names c.obj_map in
+          let check_case (Case c) = loop names c.object_map in
           List.iter check_case cases.cases
     in
     loop String_map.empty m
@@ -674,19 +675,19 @@ module Obj = struct
   let rev_mem_encs m = { m with mem_encs = List.rev m.mem_encs }
   let finish mems =
     let () = check_name_unicity mems in
-    Obj (rev_mem_encs mems)
+    Object (rev_mem_encs mems)
 
   let unfinish = function
-  | Obj map -> rev_mem_encs map | _ -> invalid_arg "Not an object"
+  | Object map -> rev_mem_encs map | _ -> invalid_arg "Not an object"
 
-  let mem ?(doc = "") ?dec_absent ?enc ?enc_meta ?enc_omit name type' obj_map =
+  let mem ?(doc = "") ?dec_absent ?enc ?enc_meta ?enc_omit name type' map =
     let mm =
       Mem.map ~doc ?dec_absent ?enc ?enc_meta ?enc_omit name type'
     in
-    let mem_decs = String_map.add name (Mem_dec mm) obj_map.mem_decs in
-    let mem_encs = Mem_enc mm :: obj_map.mem_encs in
-    let dec = Dec_app (obj_map.dec, mm.id) in
-    { obj_map with dec; mem_decs; mem_encs }
+    let mem_decs = String_map.add name (Mem_dec mm) map.mem_decs in
+    let mem_encs = Mem_enc mm :: map.mem_encs in
+    let dec = Dec_app (map.dec, mm.id) in
+    { map with dec; mem_decs; mem_encs }
 
   let opt_mem ?doc ?enc name dom map =
     let some =
@@ -701,8 +702,8 @@ module Obj = struct
 
     let case_no_dec _ = Error.msg Meta.none "No case decoder specified"
     let map ?(dec = case_no_dec) tag obj =
-      let obj_map = unfinish obj in
-      { tag; obj_map = rev_mem_encs obj_map; dec; }
+      let object_map = unfinish obj in
+      { tag; object_map = rev_mem_encs object_map; dec; }
 
     let make c = Case c
     let value c v = Case_value (c, v)
@@ -710,11 +711,11 @@ module Obj = struct
 
   let case_mem
       ?(doc = "") ?(tag_compare = Stdlib.compare) ?tag_to_string ?dec_absent
-      ?enc ?enc_omit ?enc_case name type' cases obj_map
+      ?enc ?enc_omit ?enc_case name type' cases map
     =
     (* TODO check dec_absent has a case to avoid puzzling decoding errors. *)
-    let () = match obj_map.shape with
-    | Obj_cases _ -> invalid_arg "Multiple calls to Jsont.Obj.case_mem"
+    let () = match map.shape with
+    | Object_cases _ -> invalid_arg "Multiple calls to Jsont.Obj.case_mem"
     | _ -> ()
     in
     let tag =
@@ -736,11 +737,11 @@ module Obj = struct
     in
     let id = Type.Id.make () in
     let shape =
-      Obj_cases
+      Object_cases
         (None, { tag; tag_compare; tag_to_string; id; cases; enc; enc_case })
     in
-    let dec = Dec_app (obj_map.dec, id) in
-    { obj_map with dec; shape }
+    let dec = Dec_app (map.dec, id) in
+    { map with dec; shape }
 
   module Mems = struct
     type ('mems, 'a, 'builder) map = ('mems, 'a, 'builder) mems_map
@@ -767,25 +768,25 @@ module Obj = struct
   end
 
   let set_shape_unknown_mems shape u = match shape with
-  | Obj_basic (Unknown_keep _) | Obj_cases (Some (Unknown_keep _), _) ->
+  | Object_basic (Unknown_keep _) | Object_cases (Some (Unknown_keep _), _) ->
       invalid_arg "Jsont.Obj.keep_unknown already called on object"
-  | Obj_basic _ -> Obj_basic u
-  | Obj_cases (_, cases) -> Obj_cases (Some u, cases)
+  | Object_basic _ -> Object_basic u
+  | Object_cases (_, cases) -> Object_cases (Some u, cases)
 
-  let skip_unknown obj_map =
-    { obj_map with shape = set_shape_unknown_mems obj_map.shape Unknown_skip }
+  let skip_unknown map =
+    { map with shape = set_shape_unknown_mems map.shape Unknown_skip }
 
-  let error_unknown obj_map =
-    { obj_map with shape = set_shape_unknown_mems obj_map.shape Unknown_error }
+  let error_unknown map =
+    { map with shape = set_shape_unknown_mems map.shape Unknown_error }
 
   let mems_noenc mems _o =
     Error.msg Meta.none ("No encoder for" ^ (mems_map_kind mems))
 
-  let keep_unknown ?enc msm (obj_map : ('o, 'dec) obj_map) =
+  let keep_unknown ?enc msm (map : ('o, 'dec) object_map) =
     let enc = match enc with None -> mems_noenc msm | Some enc -> enc in
-    let dec = Dec_app (obj_map.dec, msm.id) in
+    let dec = Dec_app (map.dec, msm.id) in
     let unknown = Unknown_keep (msm, enc) in
-    { obj_map with dec; shape = set_shape_unknown_mems obj_map.shape unknown }
+    { map with dec; shape = set_shape_unknown_mems map.shape unknown }
 
   let ignore = finish (map ~kind:"ignored" ())
 
@@ -797,7 +798,7 @@ end
 
 let any
     ?(kind = "") ?(doc = "") ?dec_null ?dec_bool ?dec_number ?dec_string
-    ?dec_array ?dec_obj ?enc ()
+    ?dec_array ?dec_object ?enc ()
   =
   let enc = match enc with
   | Some enc -> enc
@@ -805,7 +806,7 @@ let any
       fun _ -> Error.msgf Meta.none "No encoding type specified%a" for_kind kind
   in
   Any { kind; doc; dec_null; dec_bool; dec_number; dec_string; dec_array;
-        dec_obj; enc }
+        dec_object; enc }
 
 let map ?(kind = "") ?(doc = "") ?dec ?enc dom =
   let dec = match dec with
@@ -827,9 +828,10 @@ let ignore =
   let enc = enc_none kind in
   let dec_null = Null Base.ignore and dec_bool = Bool Base.ignore in
   let dec_number = Number Base.ignore and dec_string = String Base.ignore in
-  let dec_array = Array.ignore and dec_obj = Obj.ignore in
-  any ~kind ~dec_null ~dec_bool ~dec_number ~dec_string ~dec_array ~dec_obj ~enc
-    ()
+  let dec_array = Array.ignore and dec_object = Object.ignore in
+  any
+    ~kind ~dec_null ~dec_bool ~dec_number ~dec_string ~dec_array ~dec_object
+    ~enc ()
 
 let todo ?(kind = "") ?doc ?dec_stub () =
   let dec_none _ = Error.msgf Meta.none "Decoder%a is todo" for_kind kind in
@@ -869,10 +871,10 @@ let option ?kind ?doc t =
   | Number _ -> any ?doc ?kind ~dec_null:none ~dec_number:some ~enc ()
   | String _ -> any ?doc ?kind ~dec_null:none ~dec_string:some ~enc ()
   | Array _ -> any ?doc ?kind ~dec_null:none ~dec_array:some ~enc ()
-  | Obj _ -> any ?doc ?kind ~dec_null:none ~dec_obj:some ~enc ()
+  | Object _ -> any ?doc ?kind ~dec_null:none ~dec_object:some ~enc ()
   | (Any _ | Map _ | Rec _) ->
       any ?doc ?kind ~dec_null:none ~dec_bool:some ~dec_number:some
-        ~dec_string:some ~dec_array:some ~dec_obj:some ~enc ()
+        ~dec_string:some ~dec_array:some ~dec_object:some ~enc ()
 
 (* Integers *)
 
@@ -1172,14 +1174,14 @@ let tn ?(kind = "") ?doc ~n elt =
 
 type name = string node
 type mem = name * json
-and obj = mem list
+and object' = mem list
 and json =
 | Null of unit node
 | Bool of bool node
 | Number of float node
 | String of string node
 | Array of json list node
-| Obj of obj node
+| Object of object' node
 
 let pp_null = Fmt.json_null
 let pp_bool = Fmt.json_bool
@@ -1218,7 +1220,7 @@ let pp_json' ?(number_format = Fmt.json_default_number_format) () ppf j =
   | Number (f, _) -> pp_number' number_format ppf f
   | String (s, _) -> pp_string ppf s
   | Array (a, _) -> pp_array ppf a
-  | Obj (o, _) -> pp_obj ppf o
+  | Object (o, _) -> pp_obj ppf o
   in
   pp_value ppf j
 
@@ -1227,13 +1229,13 @@ let pp_json ppf j = pp_json' () ppf j
 module Json = struct
   let meta = function
   | Null (_, m) -> m | Bool (_, m) -> m | Number (_, m) -> m
-  | String (_, m) -> m | Array (_, m) -> m | Obj (_, m) -> m
+  | String (_, m) -> m | Array (_, m) -> m | Object (_, m) -> m
 
   let get_meta = meta
 
   let sort = function
   | Null _ -> Sort.Null | Bool _ -> Sort.Bool | Number _ -> Sort.Number
-  | String _ -> Sort.String | Array _ -> Sort.Array | Obj _ -> Sort.Obj
+  | String _ -> Sort.String | Array _ -> Sort.Array | Object _ -> Sort.Object
 
   let rec find_mem n = function
   | [] -> None
@@ -1242,8 +1244,8 @@ module Json = struct
 
   let find_mem' (n, _) ms = find_mem n ms
 
-  let obj_names mems = List.map (fun ((n, _), _) -> n) mems
-  let obj_names' mems = List.map fst mems
+  let object_names mems = List.map (fun ((n, _), _) -> n) mems
+  let object_names' mems = List.map fst mems
 
   (* Constructors *)
 
@@ -1257,7 +1259,7 @@ module Json = struct
   let array ?(meta = Meta.none) a = Array (Stdlib.Array.to_list a, meta)
   let name ?(meta = Meta.none) n = n, meta
   let mem n v = n, v
-  let obj ?(meta = Meta.none) mems = Obj (mems, meta)
+  let object' ?(meta = Meta.none) mems = Object (mems, meta)
   let option c ?meta = function None -> null ?meta () | Some v -> c ?meta v
   let list ?(meta = Meta.none) l = Array (l, meta)
 
@@ -1283,10 +1285,10 @@ module Json = struct
   let stub ?meta j = match sort j with
   | Null -> null ?meta () | Bool -> bool ?meta false
   | Number -> number ?meta 0. | String -> string ?meta ""
-  | Array -> list ?meta [] | Obj -> obj ?meta []
+  | Array -> list ?meta [] | Object -> object' ?meta []
 
   let empty_array = list []
-  let empty_obj = obj []
+  let empty_object = object' []
 
   (* Errors *)
 
@@ -1322,9 +1324,9 @@ module Json = struct
       (match j with
       | Array (vs, meta) -> decode_array map meta vs
       | j -> error_type t j)
-  | Obj map ->
+  | Object map ->
       (match j with
-      | Obj (mems, meta) -> decode_object map meta mems
+      | Object (mems, meta) -> decode_object map meta mems
       | j -> error_type t j)
   | Map map -> map.dec (decode map.dom j)
   | Any map -> decode_any t map j
@@ -1347,44 +1349,44 @@ module Json = struct
     in
     next map meta (map.dec_empty ()) 0 vs
 
-  and decode_object : type o. (o, o) Obj.map -> Meta.t -> obj -> o =
+  and decode_object : type o. (o, o) Object.map -> Meta.t -> object' -> o =
   fun map meta mems ->
     let dict = Dict.empty in
     let umems = Unknown_mems None in
     apply_dict map.dec @@
-    decode_obj_map map meta umems String_map.empty String_map.empty dict mems
+    decode_object_map map meta umems String_map.empty String_map.empty dict mems
 
-  and decode_obj_map : type o.
-    (o, o) Obj.map -> Meta.t -> unknown_mems_option ->
-    mem_dec String_map.t -> mem_dec String_map.t -> Dict.t -> obj -> Dict.t
+  and decode_object_map : type o.
+    (o, o) Object.map -> Meta.t -> unknown_mems_option ->
+    mem_dec String_map.t -> mem_dec String_map.t -> Dict.t -> object' -> Dict.t
   =
   fun map meta umems mem_miss mem_decs dict mems ->
     let u _ _ _ = assert false in
     let mem_miss = String_map.union u mem_miss map.mem_decs in
     let mem_decs = String_map.union u mem_decs map.mem_decs in
     let dict = match map.shape with
-    | Obj_cases (umems', cases) ->
+    | Object_cases (umems', cases) ->
         let umems' = Unknown_mems umems' in
         let umems, dict = Repr.override_unknown_mems ~by:umems umems' dict in
-        decode_obj_cases map meta umems cases mem_miss mem_decs dict [] mems
-    | Obj_basic umems' ->
+        decode_object_cases map meta umems cases mem_miss mem_decs dict [] mems
+    | Object_basic umems' ->
         let umems' = Unknown_mems (Some umems') in
         let umems, dict = Repr.override_unknown_mems ~by:umems umems' dict in
         match umems with
         | Unknown_mems (Some Unknown_skip | None) ->
             let umems = Unknown_skip in
-            decode_obj_basic map meta umems () mem_miss mem_decs dict mems
+            decode_object_basic map meta umems () mem_miss mem_decs dict mems
         | Unknown_mems (Some (Unknown_error as umems)) ->
-            decode_obj_basic map meta umems () mem_miss mem_decs dict mems
+            decode_object_basic map meta umems () mem_miss mem_decs dict mems
         | Unknown_mems (Some (Unknown_keep (umap, _) as umems)) ->
             let umap = umap.dec_empty () in
-            decode_obj_basic map meta umems umap mem_miss mem_decs dict mems
+            decode_object_basic map meta umems umap mem_miss mem_decs dict mems
     in
-    Dict.add obj_meta_arg meta dict
+    Dict.add object_meta_arg meta dict
 
-  and decode_obj_basic : type o p m b.
-    (o, o) obj_map -> Meta.t -> (p, m, b) unknown_mems -> b ->
-    mem_dec String_map.t -> mem_dec String_map.t -> Dict.t -> obj -> Dict.t
+  and decode_object_basic : type o p m b.
+    (o, o) object_map -> Meta.t -> (p, m, b) unknown_mems -> b ->
+    mem_dec String_map.t -> mem_dec String_map.t -> Dict.t -> object' -> Dict.t
   =
   fun map meta umems umap mem_miss mem_decs dict -> function
   | [] -> Repr.finish_object_decode map meta umems umap mem_miss dict
@@ -1395,11 +1397,12 @@ module Json = struct
           | Error e -> Repr.error_push_object meta map nm e
           in
           let mem_miss = String_map.remove n mem_miss in
-          decode_obj_basic map meta umems umap mem_miss mem_decs dict mems
+          decode_object_basic map meta umems umap mem_miss mem_decs dict mems
       | None ->
           match umems with
           | Unknown_skip ->
-              decode_obj_basic map meta umems umap mem_miss mem_decs dict mems
+              decode_object_basic
+                map meta umems umap mem_miss mem_decs dict mems
           | Unknown_error ->
               let fnd = nm :: find_all_unexpected ~mem_decs mems in
               Repr.unexpected_mems_error meta map ~fnd
@@ -1408,12 +1411,13 @@ module Json = struct
                 try umap'.dec_add nmeta n (decode umap'.mems_type v) umap with
                 | Error e -> Repr.error_push_object meta map nm e
               in
-              decode_obj_basic map meta umems umap mem_miss mem_decs dict mems
+              decode_object_basic
+                map meta umems umap mem_miss mem_decs dict mems
 
-  and decode_obj_cases : type o cs t.
-    (o, o) obj_map -> Meta.t -> unknown_mems_option -> (o, cs, t) obj_cases ->
-    mem_dec String_map.t -> mem_dec String_map.t -> Dict.t -> obj -> obj ->
-    Dict.t
+  and decode_object_cases : type o cs t.
+    (o, o) object_map -> Meta.t -> unknown_mems_option ->
+    (o, cs, t) object_cases -> mem_dec String_map.t -> mem_dec String_map.t ->
+    Dict.t -> object' -> object' -> Dict.t
   =
   fun map meta umems cases mem_miss mem_decs dict delay mems ->
     let decode_case_tag map meta tag delay mems =
@@ -1423,17 +1427,19 @@ module Json = struct
       | Some (Case case) ->
           let mems = List.rev_append delay mems in
           let dict =
-            decode_obj_map case.obj_map meta umems mem_miss mem_decs dict mems
+            decode_object_map
+              case.object_map meta umems mem_miss mem_decs dict mems
           in
-          Dict.add cases.id (case.dec (apply_dict case.obj_map.dec dict)) dict
+          Dict.add
+            cases.id (case.dec (apply_dict case.object_map.dec dict)) dict
     in
     match mems with
     | [] ->
         (match cases.tag.dec_absent with
         | Some tag -> decode_case_tag map meta tag delay []
         | None ->
-            let obj_kind = Repr.obj_map_value_kind map in
-            Error.missing_mems meta ~obj_kind
+            let object_kind = Repr.object_map_value_kind map in
+            Error.missing_mems meta ~object_kind
               ~exp:[cases.tag.name]
               ~fnd:(List.map (fun ((n, _), _) -> n) delay))
     | ((n, meta as nm), v as mem) :: mems ->
@@ -1446,14 +1452,14 @@ module Json = struct
         match String_map.find_opt n mem_decs with
         | None ->
             let delay = mem :: delay in
-            decode_obj_cases
+            decode_object_cases
               map meta umems cases mem_miss mem_decs dict delay mems
         | Some (Mem_dec m) ->
             let dict = try Dict.add m.id (decode m.type' v) dict with
             | Error e -> Repr.error_push_object meta map nm e
             in
             let mem_miss = String_map.remove n mem_miss in
-            decode_obj_cases
+            decode_object_cases
               map meta umems cases mem_miss mem_decs dict delay mems
 
   and decode_any : type a. a Repr.t -> a any_map -> json -> a =
@@ -1467,7 +1473,7 @@ module Json = struct
     | Number _ -> dec t map.dec_number j
     | String _ -> dec t map.dec_string j
     | Array _ -> dec t map.dec_array j
-    | Obj _ -> dec t map.dec_obj j
+    | Object _ -> dec t map.dec_object j
 
   let dec = decode
   let decode' t j = try Ok (decode t j) with Error e -> Result.Error e
@@ -1487,15 +1493,15 @@ module Json = struct
         | Error e -> Repr.error_push_array Meta.none map (i, Meta.none) e
       in
       list ~meta:(map.enc_meta v) (List.rev (map.enc (enc map) [] v))
-  | Obj map ->
-      let mems = encode_obj map ~do_unknown:true v [] in
-      Obj (List.rev mems, map.enc_meta v)
+  | Object map ->
+      let mems = encode_object map ~do_unknown:true v [] in
+      Object (List.rev mems, map.enc_meta v)
   | Any map -> encode (map.enc v) v
   | Map map -> encode map.dom (map.enc v)
   | Rec t -> encode (Lazy.force t) v
 
-  and encode_obj : type o dec.
-    (o, o) obj_map -> do_unknown:bool -> o -> obj -> obj
+  and encode_object : type o dec.
+    (o, o) object_map -> do_unknown:bool -> o -> object' -> object'
   =
   fun map ~do_unknown o obj ->
     let encode_mem map obj (Mem_enc mmap) =
@@ -1508,10 +1514,10 @@ module Json = struct
     in
     let obj = List.fold_left (encode_mem map) obj map.mem_encs in
     match map.shape with
-    | Obj_basic (Unknown_keep (umap, enc)) when do_unknown ->
+    | Object_basic (Unknown_keep (umap, enc)) when do_unknown ->
         encode_unknown_mems map umap (enc o) obj
-    | Obj_basic _ -> obj
-    | Obj_cases (u, cases) ->
+    | Object_basic _ -> obj
+    | Object_cases (u, cases) ->
         let Case_value (case, c) = cases.enc_case (cases.enc o) in
         let obj =
           let n = cases.tag.name, Meta.none in
@@ -1524,12 +1530,13 @@ module Json = struct
         match u with
         | Some (Unknown_keep (umap, enc)) ->
             (* Less T.R. but feels nicer to encode unknowns at the end *)
-            let obj = encode_obj case.obj_map ~do_unknown:false c obj in
+            let obj = encode_object case.object_map ~do_unknown:false c obj in
             encode_unknown_mems map umap (enc o) obj
-        | _ -> encode_obj case.obj_map ~do_unknown c obj
+        | _ -> encode_object case.object_map ~do_unknown c obj
 
    and encode_unknown_mems : type o dec mems a builder.
-     (o, o) obj_map -> (mems, a, builder) mems_map -> mems -> obj -> obj
+     (o, o) object_map -> (mems, a, builder) mems_map -> mems -> object' ->
+     object'
    =
    fun map umap mems obj ->
      let encode_mem map meta name v obj =
@@ -1561,7 +1568,7 @@ module Json = struct
   | String _, _ -> -1 | _, String _ -> 1
   | Array (a0, _), (Array (a1, _)) -> List.compare compare a0 a1
   | Array _, _ -> -1 | _, Array _ -> 1
-  | Obj (o0, _), Obj (o1, _) ->
+  | Object (o0, _), Object (o1, _) ->
       let order_mem ((n0, _), _) ((n1, _), _) = String.compare n0 n1 in
       let compare_mem ((n0, _), j0) ((n1, _), j1) =
         let c = String.compare n0 n1 in
@@ -1603,7 +1610,7 @@ let json_string =
   in
   Repr.String (Base.map ~dec ~enc ~enc_meta ())
 
-let json, json_array, mem_list, json_obj =
+let json, json_array, mem_list, json_object =
   let rec elt = Rec any
   and array_map = lazy begin
     let dec_empty () = [] in
@@ -1623,50 +1630,50 @@ let json, json_array, mem_list, json_obj =
     let dec_add meta n v mems = ((n, meta), v) :: mems in
     let dec_finish = List.rev in
     let enc f l a = List.fold_left (fun a ((n, m), v) -> f m n v a) a l in
-    let enc = { Obj.Mems.enc = enc } in
-    Obj.Mems.map ~dec_empty ~dec_add ~dec_finish ~enc elt
+    let enc = { Object.Mems.enc = enc } in
+    Object.Mems.map ~dec_empty ~dec_add ~dec_finish ~enc elt
   end
 
-  and obj = lazy begin
+  and object' = lazy begin
     let enc_meta = function
-    | Obj (_, meta) -> meta | j -> Json.error_sort ~exp:Sort.Obj j
+    | Object (_, meta) -> meta | j -> Json.error_sort ~exp:Sort.Object j
     in
     let enc = function
-    | Obj (mems, _) -> mems | j -> Json.error_sort ~exp:Sort.Obj j
+    | Object (mems, _) -> mems | j -> Json.error_sort ~exp:Sort.Object j
     in
-    let dec meta mems = Obj (mems, meta) in
-    Obj.map' dec ~enc_meta
-    |> Obj.keep_unknown (Lazy.force mems) ~enc
-    |> Obj.finish
+    let dec meta mems = Object (mems, meta) in
+    Object.map' dec ~enc_meta
+    |> Object.keep_unknown (Lazy.force mems) ~enc
+    |> Object.finish
   end
 
   and any = lazy begin
     let json_array = Lazy.force array in
-    let json_obj = Lazy.force obj in
+    let json_object = Lazy.force object' in
     let enc = function
     | Null _ -> json_null | Bool _ -> json_bool
     | Number _ -> json_number | String _ -> json_string
-    | Array _ -> json_array | Obj _ -> json_obj
+    | Array _ -> json_array | Object _ -> json_object
     in
     Any { kind = "json"; doc = "";
           dec_null = Some json_null; dec_bool = Some json_bool;
           dec_number = Some json_number; dec_string = Some json_string;
           dec_array = Some json_array;
-          dec_obj = Some json_obj; enc }
+          dec_object = Some json_object; enc }
    end
   in
-  Lazy.force any, Lazy.force array, Lazy.force mems, Lazy.force obj
+  Lazy.force any, Lazy.force array, Lazy.force mems, Lazy.force object'
 
 let json_mems =
   let dec_empty () = [] in
   let dec_add meta n v mems = ((n, meta), v) :: mems in
-  let dec_finish mems = Obj (List.rev mems, Meta.none) in
+  let dec_finish mems = Object (List.rev mems, Meta.none) in
   let enc f j acc = match j with
-  | Obj (ms, _) -> List.fold_left (fun acc ((n, m), v) -> f m n v acc) acc ms
-  | j -> Json.error_sort ~exp:Sort.Obj j
+  | Object (ms, _) -> List.fold_left (fun acc ((n, m), v) -> f m n v acc) acc ms
+  | j -> Json.error_sort ~exp:Sort.Object j
   in
-  let enc = { Obj.Mems.enc = enc } in
-  Obj.Mems.map ~dec_empty ~dec_add ~dec_finish ~enc json
+  let enc = { Object.Mems.enc = enc } in
+  Object.Mems.map ~dec_empty ~dec_add ~dec_finish ~enc json
 
 (* Queries and updates *)
 
@@ -1685,14 +1692,14 @@ let const t v =
   let enc _v = enc in
   any
     ~dec_null:dec ~dec_bool:dec ~dec_number:dec ~dec_string:dec ~dec_array:dec
-    ~dec_obj:dec ~enc ()
+    ~dec_object:dec ~enc ()
 
 let recode ~dec:dom f ~enc =
   let m = map ~dec:f dom in
   let enc _v = enc in
   any
-    ~dec_null:m ~dec_bool:m ~dec_number:m ~dec_string:m ~dec_array:m ~dec_obj:m
-    ~enc ()
+    ~dec_null:m ~dec_bool:m ~dec_number:m ~dec_string:m ~dec_array:m
+    ~dec_object:m ~enc ()
 
 let update t =
   let dec v = Json.update t v in
@@ -1790,32 +1797,33 @@ let fold_array t f acc =
 (* Objects *)
 
 let mem ?absent name t =
-  Obj.map Fun.id |> Obj.mem ?dec_absent:absent name t ~enc:Fun.id |> Obj.finish
+  Object.map Fun.id |> Object.mem ?dec_absent:absent name t ~enc:Fun.id
+  |> Object.finish
 
 let update_mem ?absent name t =
   let update_mem n t v = n, Json.update t v in
-  let rec update_obj ~seen name t acc = function
+  let rec update_object ~seen name t acc = function
   | ((name', _ as n), v) :: mems when String.equal name name' ->
-      update_obj ~seen:true name t (update_mem n t v :: acc) mems
-  | mem :: mems -> update_obj ~seen name t (mem :: acc) mems
+      update_object ~seen:true name t (update_mem n t v :: acc) mems
+  | mem :: mems -> update_object ~seen name t (mem :: acc) mems
   | [] when seen -> Either.Right (List.rev acc)
   | [] -> Either.Left acc
   in
   let update ?absent name t = function
-  | Obj (mems, meta) ->
-      let mems = match update_obj ~seen:false name t [] mems with
+  | Object (mems, meta) ->
+      let mems = match update_object ~seen:false name t [] mems with
       | Either.Right mems -> mems
       | Either.Left acc ->
           match absent with
           | None ->
-              let fnd = Json.obj_names mems in
-              Error.missing_mems meta ~obj_kind:"" ~exp:[name] ~fnd
+              let fnd = Json.object_names mems in
+              Error.missing_mems meta ~object_kind:"" ~exp:[name] ~fnd
           | Some j ->
               let m = update_mem (name, Meta.none) t j in
               List.rev (m :: acc)
       in
-      Obj (mems, meta)
-  | j -> Json.error_sort ~exp:Sort.Obj j
+      Object (mems, meta)
+  | j -> Json.error_sort ~exp:Sort.Object j
   in
   let update = update ?absent name t in
   let enc j = j in
@@ -1825,54 +1833,54 @@ let set_mem ?(allow_absent = false) t name v =
   let absent = if allow_absent then Some Json.null' else None in
   update_mem ?absent name (const t v)
 
-let update_json_obj ~name ~dec_add ~dec_finish =
+let update_json_object ~name ~dec_add ~dec_finish =
   let mems =
     let dec_empty () = false, [] in
     let enc f (_, l) a = List.fold_left (fun a ((n, m), v) -> f m n v a) a l in
-    let enc = { Obj.Mems.enc = enc } in
-    Obj.Mems.map ~dec_empty ~dec_add ~dec_finish ~enc json
+    let enc = { Object.Mems.enc = enc } in
+    Object.Mems.map ~dec_empty ~dec_add ~dec_finish ~enc json
   in
   let enc_meta = function
-  | Obj (_, meta) -> meta | j -> Json.error_sort ~exp:Sort.Obj j
+  | Object (_, meta) -> meta | j -> Json.error_sort ~exp:Sort.Object j
   in
   let enc = function
-  | Obj (mems, _) -> false, mems | j -> Json.error_sort ~exp:Sort.Obj j
+  | Object (mems, _) -> false, mems | j -> Json.error_sort ~exp:Sort.Object j
   in
   let dec meta (ok, mems) =
-    let fnd = Json.obj_names mems in
+    let fnd = Json.object_names mems in
     if not ok
-    then Error.missing_mems meta ~obj_kind:"" ~exp:[name] ~fnd else
-    Obj (List.rev mems, meta)
+    then Error.missing_mems meta ~object_kind:"" ~exp:[name] ~fnd else
+    Object (List.rev mems, meta)
   in
-  Obj.map' dec ~enc_meta
-  |> Obj.keep_unknown mems ~enc
-  |> Obj.finish
+  Object.map' dec ~enc_meta
+  |> Object.keep_unknown mems ~enc
+  |> Object.finish
 
 let delete_mem ?(allow_absent = false) name =
   let dec_add meta n v (ok, mems) =
     if n = name then true, mems else ok, ((n, meta), v) :: mems
   in
   let dec_finish (ok, ms as a) = if allow_absent then (true, ms) else a in
-  update_json_obj ~name ~dec_add ~dec_finish
+  update_json_object ~name ~dec_add ~dec_finish
 
-let fold_obj t f acc =
+let fold_object t f acc =
   let mems =
     let dec_empty () = acc and dec_add = f and dec_finish acc = acc in
     let enc f _ acc = acc in
-    Obj.Mems.map t ~dec_empty ~dec_add ~dec_finish ~enc:{ Obj.Mems.enc }
+    Object.Mems.map t ~dec_empty ~dec_add ~dec_finish ~enc:{ Object.Mems.enc }
   in
-  Obj.map Fun.id
-  |> Obj.keep_unknown mems ~enc:Fun.id
-  |> Obj.finish
+  Object.map Fun.id
+  |> Object.keep_unknown mems ~enc:Fun.id
+  |> Object.finish
 
-let filter_map_obj a b f =
+let filter_map_object a b f =
   let dec_add meta n v (_, mems) =
     match f meta n (Json.dec a v) with
     | None -> (true, mems)
     | Some (n', v') -> (true, ((n', meta), (Json.enc b v')) :: mems)
   in
   let dec_finish acc = acc in
-  update_json_obj ~name:"" (* irrelevant *) ~dec_add ~dec_finish
+  update_json_object ~name:"" (* irrelevant *) ~dec_add ~dec_finish
 
 (* Indices *)
 
@@ -1909,14 +1917,14 @@ let update_path ?stub ?absent p t = match Path.rev_indices p with
         | Path.Nth (n, _) :: is ->
             loop Json.empty_array (update_nth ~absent n t) is
         | Path.Mem (n, _) :: is ->
-            loop Json.empty_obj (update_mem ~absent n t) is
+            loop Json.empty_object (update_mem ~absent n t) is
         | [] -> t
         in
         match i with
         | Path.Nth (n, _) ->
             loop Json.empty_array (update_nth ?stub ~absent n t) is
         | Path.Mem (n, _) ->
-            loop Json.empty_obj (update_mem ~absent n t) is
+            loop Json.empty_object (update_mem ~absent n t) is
 
 let delete_path ?allow_absent p = match Path.rev_indices p with
 | [] -> recode ~dec:ignore (fun () -> Json.null') ~enc:json

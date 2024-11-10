@@ -9,10 +9,10 @@ module Message = struct
   let content msg = msg.content
   let public msg = msg.public
   let jsont : t Jsont.t =
-    Jsont.Obj.map make
-    |> Jsont.Obj.mem "content" Jsont.string ~enc:content
-    |> Jsont.Obj.mem "public" Jsont.bool ~enc:public
-    |> Jsont.Obj.finish
+    Jsont.Object.map make
+    |> Jsont.Object.mem "content" Jsont.string ~enc:content
+    |> Jsont.Object.mem "public" Jsont.bool ~enc:public
+    |> Jsont.Object.finish
 end
 
 type ('ret, 'f) app =
