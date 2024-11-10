@@ -243,11 +243,20 @@ let rec nextc d = match available d with
     let s = setup_overlap d 0 (next_utf_8_length d) in
     nextc d; set_slice d s
 | _ ->
-    let udec = Bytes.get_utf_8_uchar d.i d.i_next in
-    if not (Uchar.utf_decode_is_valid udec) then err_malformed_utf_8 d else
-    let u = Uchar.to_int (Uchar.utf_decode_uchar udec) in
-    let ulen = Uchar.utf_decode_length udec in
-    d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
+    let u =
+      match Bytes.get d.i d.i_next with
+      | '\x00' .. '\x7F' as u -> (* ASCII fast path *)
+          d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
+          Char.code u
+      | _ ->
+          let udec = Bytes.get_utf_8_uchar d.i d.i_next in
+          if not (Uchar.utf_decode_is_valid udec)
+          then err_malformed_utf_8 d else
+          let u = Uchar.to_int (Uchar.utf_decode_uchar udec) in
+          let ulen = Uchar.utf_decode_length udec in
+          d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
+          u
+    in
     begin match u with
     | 0x000D (* CR *) -> d.line_start <- d.byte_count; d.line <- d.line + 1;
     | 0x000A (* LF *) ->
@@ -263,13 +272,15 @@ let[@inline] ws_clear d = if d.layout then Buffer.clear d.ws
 let[@inline] ws_pop d =
   if d.layout then (let t = Buffer.contents d.ws in ws_clear d; t) else ""
 
-let[@inline] ws_add d =
-  if d.layout then (Buffer.add_utf_8_uchar d.ws (Uchar.unsafe_of_int d.u))
+let[@inline] ws_add d = (* assert d.u is an ASCII char *)
+  if d.layout then (Buffer.add_char d.ws (Char.unsafe_chr d.u))
 
 let[@inline] token_clear d = Buffer.clear d.token
 let[@inline] token_pop d = let t = Buffer.contents d.token in (token_clear d; t)
 let[@inline] token_add d u =
-  Buffer.add_utf_8_uchar d.token (Uchar.unsafe_of_int u)
+  if u <= 0x7F
+  then Buffer.add_char d.token (Char.unsafe_chr u)
+  else Buffer.add_utf_8_uchar d.token (Uchar.unsafe_of_int u)
 
 let[@inline] accept d = token_add d d.u; nextc d
 
