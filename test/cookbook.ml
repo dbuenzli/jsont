@@ -10,6 +10,29 @@ let string_null_is_empty =
   let enc = function "" -> null | _ -> Jsont.string in
   Jsont.any ~dec_null:null ~dec_string:Jsont.string ~enc ()
 
+
+(* Base maps *)
+
+module M = struct
+  type t = unit
+  let result_of_string s : (t, string) result = invalid_arg "unimplemented"
+  let of_string_or_failure s : t = invalid_arg "unimplemented"
+  let to_string v : string = invalid_arg "unimplemented"
+end
+
+let m_jsont =
+  let dec = Jsont.Base.dec_result M.result_of_string in
+  let enc = Jsont.Base.enc M.to_string in
+  Jsont.Base.string (Jsont.Base.map ~kind:"M.t" ~dec ~enc ())
+
+let m_jsont' =
+  let dec = Jsont.Base.dec_failure M.of_string_or_failure in
+  let enc = Jsont.Base.enc M.to_string in
+  Jsont.Base.string (Jsont.Base.map ~kind:"M.t" ~dec ~enc ())
+
+let m_jsont'' =
+  Jsont.of_of_string ~kind:"M.t" M.result_of_string ~enc:M.to_string
+
 (* Objects as records *)
 
 module Person = struct
@@ -18,7 +41,7 @@ module Person = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Object.map make ~kind:"Person"
+    Jsont.Object.map ~kind:"Person" make
     |> Jsont.Object.mem "name" Jsont.string ~enc:name
     |> Jsont.Object.mem "age" Jsont.int ~enc:age
     |> Jsont.Object.finish
@@ -42,7 +65,7 @@ module Person_opt_age = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Object.map make ~kind:"Person"
+    Jsont.Object.map ~kind:"Person" make
     |> Jsont.Object.mem "name" Jsont.string ~enc:name
     |> Jsont.Object.mem "age" Jsont.(some int)
       ~dec_absent:None ~enc_omit:Option.is_none ~enc:age
@@ -183,5 +206,24 @@ module Geometry_record = struct
     Jsont.Object.map ~kind:"Geometry" make
     |> Jsont.Object.mem "name" Jsont.string ~enc:name
     |> Jsont.Object.case_mem "type" Jsont.string ~enc:type' ~enc_case cases
+    |> Jsont.Object.finish
+end
+
+(* Flattening objects on queries *)
+
+module Group = struct
+  type t = { id : int; name : string; persons : Person.t list }
+  let make id name persons = { id; name; persons }
+
+  let info_jsont =
+    Jsont.Object.map make
+    |> Jsont.Object.mem "id" Jsont.int
+    |> Jsont.Object.mem "name" Jsont.string
+    |> Jsont.Object.finish
+
+  let jsont =
+    Jsont.Object.map (fun k persons -> k persons)
+    |> Jsont.Object.mem "info" info_jsont
+    |> Jsont.Object.mem "persons" (Jsont.list Person.jsont)
     |> Jsont.Object.finish
 end

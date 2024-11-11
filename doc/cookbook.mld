@@ -11,15 +11,21 @@ Given an OCaml type [t] its JSON type value should be called
 [t_jsont]. If your type follows the [M.t] module convention use
 [M.jsont].
 
-{1:recipes Recipes}
+{1:tips General tips}
 
-{2:dealing_with_null Dealing with [null] values}
+Note that constructing {!Jsont.t} values has a cost. In particular
+when object descriptions are {!Jsont.Object.finish}ed a few checks are
+performed on the definition. Hence it's better to construct them as
+toplevel values or at least make sure you are not repeatedly
+constructing them dynamically in a tight loop.
+
+{1:dealing_with_null Dealing with [null] values}
 
 Nullable JSON values are naturally mapped to ocaml [option] types. The
 {!Jsont.val-option} combinator does exactly that.
 
 It is also possible to map JSON [null]s to a default value with
-{!Jsont.null}. This can then be combined with {!Jsont.any} to compose
+{!Jsont.null}. This can then be combined with {!Jsont.val-any} to compose
 with other JSON types.
 
 For example the following maps JSON [null]s to [""] and JSON strings
@@ -33,36 +39,36 @@ let string_null_is_empty =
   Jsont.any ~dec_null:null ~dec_string:Jsont.string ~enc ()
 ]}
 
-See also {!numbers_as_nulls} and the tangentially related topic of
+See also {!non_finite_numbers} and the tangentially related topic of
 {!optional_members}.
 
-{2:dealing_with_numbers Dealing with numbers}
+{1:dealing_with_numbers Dealing with numbers}
 
-JSON is utterly broken to interchange numbers reliably. Generally
-interopable implementations, in particular the mostly widely deployed
-and formally specified ECMAScript implementation, use IEEE 754
-[binary64] values to represent JSON numbers. This has the following
-consequences.
+JSON is utterly broken to interchange numbers reliably as the standard
+provides no constraints on their representation. Generally interopable
+implementations, in particular the most widely deployed and formally
+specified ECMAScript implementation, use IEEE 754 [binary64] values to
+represent finite JSON numbers and [null] values to represent on
+non-finite one. This has the following consequences.
 
-{3:numbers_as_integers Numbers as integers}
+{2:integer_numbers Integer numbers}
 
 For representing integers by JSON numbers one is limited to the range
 \[-2{^53};2{^53}\] which are the only integers represented
 precisely in IEEE 754 [binary64]. If you want to represent numbers
-beyond this range you need to represent them by a JSON string. Two
+beyond this range you need to represent them by a JSON string. These
 scheme can be seen in the wild:
 {ul
-{- Integers are unconditionally represented by strings in which case you can use
-   {!Jsont.int_as_string} or {!Jsont.int64_as_string}.}
+{- Integers are unconditionally represented by strings. In this case
+   {!Jsont.int_as_string} or {!Jsont.int64_as_string} can be used.}
 {- Integers are represented by numbers or strings depending on their
-   magnitude, in which case {!Jsont.int} or {!Jsont.int64}
-   can be used.}}
+   magnitude. In this case {!Jsont.int} or {!Jsont.int64}
+   can be used.}
+{- The integer range of interest can be fully represented in a JSON number.
+   In this case {!Jsont.int8}, {!Jsont.uint8}, {!Jsont.int16}, etc. can be
+   used.}}
 
-For those integer sizes that can be fully represented in JSON number's
-integer range, like {!Jsont.uint8}, {!Jsont.uint16}, etc.
-only JSON numbers are used.
-
-{3:numbers_as_nulls Numbers as [null]s}
+{2:non_finite_numbers Non-finite numbers}
 
 JSON numbers cannot represent IEEE 754 [binary64] numbers: infinities
 and NaNs cannot be represented. The formally defined
@@ -78,32 +84,55 @@ If you can agree with a third party on a better encoding, the
 {!Jsont.any_float} or {!Jsont.float_as_hex_string} provide
 lossless representations of IEEE 754 [binary64] values in JSON.
 
-{2:base_types Transforming base types}
+{1:base_types Transforming base types}
 
-The {!Jsont.map} is a general mapping function over {!Jsont.t} types.
+The {!Jsont.map} combinator is a general map over {!Jsont.t} types.
 It should rather be used to alter the representation of existing
-[Jsont.t] values. For transforming base types it is better to use the
+{!Jsont.t} values. For transforming base types it is better to use the
 base maps of {!Jsont.Base} as more context is made available to the
-functions.
+functions notably when erroring.
 
-{3:transform_strings Transforming strings}
+{2:transform_strings Transforming strings}
 
-A few JSON string transformers like {!Jsont.enum} or {!Jsont.binary_string}
-are built-in. If you need to devise your own here's a pattern you can use
-with [M.{of,to}_string] that have different interfaces ([result], raising
-[Failure _], etc)
+A few simple JSON string transformers like {!Jsont.enum} or
+{!Jsont.binary_string} are provided.
 
+If you need to devise your own maps from your own [M.{of,to}_string]
+functions that return [result] or raise [Faiulre _] you can adapt them
+with {{!Jsont.Base.decenc}these functions}. For example:
 {[
-let m_string =
+let m_jsont =
   let dec = Jsont.Base.dec_result M.result_of_string in
   let enc = Jsont.Base.enc M.to_string in
   Jsont.Base.string (Jsont.Base.map ~kind:"M.t" ~dec ~enc ())
 
-let m_string' =
-  let dec = Jsont.Base.dec_failure M.failing_of_string in
+let m_jsont' =
+  let dec = Jsont.Base.dec_failure M.of_string_or_failure in
   let enc = Jsont.Base.enc M.to_string in
   Jsont.Base.string (Jsont.Base.map ~kind:"M.t" ~dec ~enc ())
 ]}
+
+If you are dealing with result decoders you can also simply
+use {!Jsont.of_of_string}:
+
+{[
+let m_jsont'' =
+  Jsont.of_of_string ~kind:"M.t" M.result_of_string ~enc:M.to_string
+]}
+
+which is a shortcut for the [m_jsont] written above.
+
+{1:dealing_with_arrays Dealing with arrays}
+
+JSON arrays can be directly mapped to OCaml {{!Jsont.list}lists},
+{{!Jsont.array}arrays}, {{!Jsont.bigarray}bigarray} or bespoke
+low-dimensional {{!Jsont.t2}tuples}. If your JSON is an array of
+objects keyed by some identifier you may find
+{!Jsont.array_as_string_map} handy.
+
+If none of that fits you can always devise your own {!Jsont.Array.val-map}.
+
+{1:dealing_with_objects Dealing with objects}
 
 {2:objects_as_records Objects as records}
 
@@ -123,7 +152,7 @@ module Person = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Object.map make ~kind:"Person"
+    Jsont.Object.map ~kind:"Person" make
     |> Jsont.Object.mem "name" Jsont.string ~enc:name
     |> Jsont.Object.mem "age" Jsont.int ~enc:age
     |> Jsont.Object.finish
@@ -169,7 +198,7 @@ module Person_opt_age = struct
   let name p = p.name
   let age p = p.age
   let jsont =
-    Jsont.Object.map make ~kind:"Person"
+    Jsont.Object.map ~kind:"Person" make
     |> Jsont.Object.mem "name" Jsont.string ~enc:name
     |> Jsont.Object.mem "age" Jsont.(some int)
       ~dec_absent:None ~enc_omit:Option.is_none ~enc:age
@@ -233,48 +262,11 @@ end
 ]}
 
 The value of the [unknown] field can be further queried with other
-JSON types and {!Jsont.Json.decode}. It is also possible to define
+JSON types and {!Jsont.Json.val-decode}. It is also possible to define
 your own data structure to keep unknown members, see
 {!Jsont.Object.Mems}. See also {!objects_as_maps}.
 
-{2:recursion Dealing with recursive JSON}
-
-To describe recursive JSON values you need to define your description
-in a [lazy] expression and use {!Jsont.rec'} to refer to the value
-you are defining. This results in the following structure:
-
-{[
-let jsont : t Jsont.t =
-  let rec t = lazy ( … Jsont.rec' t … ) in
-  Lazy.force t
-]}
-
-For example a tree encoded as a JSON object with:
-{@json[
-{ "value": …,
-  "children": […] }
-]}
-
-Is modelled by:
-
-{[
-module Tree = struct
-  type 'a t = Node of 'a * 'a t list
-  let make v children = Node (v, children)
-  let value (Node (v, _)) = v
-  let children (Node (_, children)) = children
-  let jsont value_type =
-    let rec t = lazy
-      (Jsont.Object.map ~kind:"Tree" make
-       |> Jsont.Object.mem "value" value_type ~enc:value
-       |> Jsont.Object.mem "children" (Jsont.list (Jsont.rec' t)) ~enc:children
-       |> Jsont.Object.finish)
-    in
-    Lazy.force t
-end
-]}
-
-{2:cases Dealing with object types or classes}
+{2:cases Object types or classes}
 
 Sometimes JSON objects have a distinguished case member, called
 ["type"], ["class"] or ["version"] whose value define the rest of the
@@ -398,3 +390,88 @@ module Geometry_record = struct
     |> Jsont.Object.finish
 end
 ]}
+
+{2:flattening Flattening nested objects}
+
+If you are only interested in extracting data it may be useful to
+flatten some objects whose members are too nested for your needs.
+
+For that just remember that nothing says that JSON objects
+cannot be mapped to OCaml functions. For examples to gather this kind
+of data for a group of person into a single record:
+
+{@json[
+{
+  "info" : { "id" : 1, "name": "untitled" }
+  "persons" : [ … ]
+}
+]}
+
+You can use the following structure:
+
+{[
+module Group = struct
+  type t = { id : int; name : string; persons : Person.t list }
+  let make id name persons = { id; name; persons }
+
+  let info_jsont =
+    Jsont.Object.map make
+    |> Jsont.Object.mem "id" Jsont.int
+    |> Jsont.Object.mem "name" Jsont.string
+    |> Jsont.Object.finish
+
+  let jsont =
+    Jsont.Object.map (fun k persons -> k persons)
+    |> Jsont.Object.mem "info" info_jsont
+    |> Jsont.Object.mem "persons" (Jsont.list Person.jsont)
+    |> Jsont.Object.finish
+end
+]}
+
+This however will not allow you to use [jsont] to encode. If you wish
+to do so it's likely better to follow the JSON structure and hide the
+annoying access structure under an abstract type behind a nice API.
+
+{1:recursion Dealing with recursive JSON}
+
+To describe recursive JSON values you need to define your description
+in a [lazy] expression and use {!Jsont.rec'} to refer to the value
+you are defining. This results in the following structure:
+
+{[
+let jsont : t Jsont.t =
+  let rec t = lazy ( … Jsont.rec' t … ) in
+  Lazy.force t
+]}
+
+For example a tree encoded as a JSON object with:
+{@json[
+{ "value": …,
+  "children": […] }
+]}
+
+Is modelled by:
+
+{[
+module Tree = struct
+  type 'a t = Node of 'a * 'a t list
+  let make v children = Node (v, children)
+  let value (Node (v, _)) = v
+  let children (Node (_, children)) = children
+  let jsont value_type =
+    let rec t = lazy
+      (Jsont.Object.map ~kind:"Tree" make
+       |> Jsont.Object.mem "value" value_type ~enc:value
+       |> Jsont.Object.mem "children" (Jsont.list (Jsont.rec' t)) ~enc:children
+       |> Jsont.Object.finish)
+    in
+    Lazy.force t
+end
+]}
+
+The
+{{:https://erratique.ch/repos/jsont/tree/test/topojson.ml}[topojson.ml]}
+and
+{{:https://erratique.ch/repos/jsont/tree/test/geojson.ml}[geojson.ml]}
+examples in the source repository provide more extensive examples of
+recursive definition.

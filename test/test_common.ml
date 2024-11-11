@@ -61,11 +61,20 @@ let encode_error ?__POS__:pos ?msg t v =
   | Error e ->
       match msg with None -> () | Some msg -> Test.styled_string msg e ~__POS__
 
-let update ?__POS__:pos q j j' =
+let update ?__POS__:pos ?(format = Jsont.Minify) q j j' =
+  let layout = format = Jsont.Layout in
   Test.block ?__POS__:pos @@ fun () ->
-  match decode q j with
+  match decode ~layout q j with
   | Error e -> Test.fail "%a" Fmt.lines e ~__POS__
-  | Ok v -> encode_ok Jsont.json ~value:v j' ~__POS__
+  | Ok v when supports_layout () || not (format = Jsont.Layout) ->
+      encode_ok ~format Jsont.json ~value:v j' ~__POS__
+  | Ok v ->
+      let j' =
+        encode ~format:Jsont.Indent Jsont.json
+          (decode Jsont.json j' |> Result.get_ok)
+        |> Result.get_ok
+      in
+      encode_ok ~format:Jsont.Indent Jsont.json ~value:v j' ~__POS__
 
 (* [trip t src] is the über testing combinator.
 
@@ -463,77 +472,148 @@ let test_rec () =
 let test_const () =
   Test.test "Jsont.const" @@ fun () ->
   trip ~lossy:true Jsont.(const int 4) " {} " ~value:4 ~__POS__;
-  encode_ok Jsont.(const bool true) ~value:false "true" ~__POS__;
+  trip ~lossy:true Jsont.(const bool true) ~value:true "false" ~__POS__;
   ()
 
-let int_to_string = Jsont.(recode ~dec:int string_of_int ~enc:string)
+let recode_int_to_string = Jsont.(recode ~dec:int string_of_int ~enc:string)
 
 let test_array_queries () =
-  let a = "[1,[1,2],3]" in
-  Test.test "Jsont.{nth,update_nth,delete_nth}" @@ fun () ->
+  let a = "[1,[ 1, 2], 3] " in
+  Test.test "Jsont.{nth,*_nth,filter_map_array,fold_array}" @@
+  fun () ->
+  (* Jsont.nth *)
+  decode_ok Jsont.(nth 0 @@ int) a ~value:1 ~__POS__;
   decode_ok Jsont.(nth 1 @@ nth 1 int) a ~value:2 ~__POS__;
   decode_ok Jsont.(nth 1 @@ list int) a ~value:[1;2] ~__POS__;
-  update Jsont.(update_nth 1 @@ update_nth 1 Jsont.(const int 4))
-    a "[1,[1,4],3]" ~__POS__;
-  update Jsont.(update_nth 1 @@ update_nth 1 int_to_string)
-    a "[1,[1,\"2\"],3]" ~__POS__;
-  decode_error
-    Jsont.(update_nth 1 @@ update_nth 2 Jsont.(const int 4)) a ~__POS__;
-(*  update
-    Jsont.(update_nth 1 @@ update_nth 3 ~absent:4 Jsont.(const int 4))
-    a "[1,[1,2,4,4],3]" ~__POS__;
-  update
-    Jsont.(update_nth 1 @@ update_nth 3 ~stub:(Jsont.Json.null ())
-             ~absent:4 (const int 4))
-    a "[1,[1,2,null,4],3]" ~__POS__; *)
+  decode_error Jsont.(nth 3 @@ int) a ~__POS__;
+  decode_ok Jsont.(nth ~absent:3 3 @@ int) ~value:3 a ~__POS__;
+  decode_ok Jsont.(nth 0 @@ int) ~value:1 a ~__POS__;
+  decode_ok Jsont.(nth 1 @@ nth 1 int) a ~value:2 ~__POS__;
+  decode_ok Jsont.(nth 1 @@ list int) a ~value:[1;2] ~__POS__;
+  (* Jsont.{set,update}_nth} *)
+  update ~format:Jsont.Layout
+    Jsont.(update_nth 1 @@ update_nth 1 Jsont.(const int 4))
+    a "[1,[ 1, 4], 3] " ~__POS__;
+  update ~format:Jsont.Layout Jsont.(update_nth 1 @@ set_nth int 0 2) a
+    "[1,[ 2, 2], 3] " ~__POS__;
+  decode_error Jsont.(update_nth 1 @@ set_nth int 2 3) a;
+  decode_error Jsont.(update_nth 3 int) a;
+  update ~format:Jsont.Layout Jsont.(update_nth 3 ~absent:5 int) a
+    "[1,[ 1, 2], 3,5] ";
+  update ~format:Jsont.Layout
+    Jsont.(update_nth 1 @@ set_nth ~allow_absent:true int 3 3) a
+    "[1,[ 1, 2,0,3], 3] " ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(update_nth 1 @@ set_nth
+             ~stub:(Jsont.Json.null ()) ~allow_absent:true int 3 3) a
+    "[1,[ 1, 2,null,3], 3] " ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(update_nth 1 @@ update_nth 1 recode_int_to_string) a
+    "[1,[ 1, \"2\"], 3] " ~__POS__;
   update Jsont.(update_nth 1 @@ delete_nth 0) a "[1,[2],3]" ~__POS__;
   decode_ok
     Jsont.(nth 1 @@ fold_array int (fun i v acc -> (i, v) :: acc) [])
     a ~value:[(1,2); (0,1)] ~__POS__;
   update Jsont.(update_nth 1 @@ filter_map_array int int
-                     (fun _ v -> if v mod 2 = 0 then None else Some (v - 1)))
+                  (fun _ v -> if v mod 2 = 0 then None else Some (v - 1)))
     a "[1,[0],3]" ~__POS__;
+  (* Jsont.delete_nth *)
+  update ~format:Jsont.Layout Jsont.(delete_nth 1) a "[1, 3] " ~__POS__;
+  decode_error Jsont.(delete_nth 3) a ~__POS__;
+  update ~format:Jsont.Layout Jsont.(delete_nth ~allow_absent:true 3) a a
+    ~__POS__;
+  (* Jsont.filter_map_array *)
+  update ~format:Jsont.Layout
+    Jsont.(filter_map_array Jsont.json Jsont.json
+             (fun i v -> if i = 1 then None else Some v)) a
+    "[1, 3] " ~__POS__;
+  (* Jsont.fold_array *)
+  decode_ok Jsont.(nth 1 @@ fold_array int (fun i v acc -> i + v + acc) 0) a
+    ~value:4 ~__POS__;
   ()
 
 let test_object_queries () =
-  let o = {|{ "a": { "b": 1 }, "c": 2}|} in
-  let o' = {|{ "a": { "b": 0, "c": 1 } }|} in
-  Test.test "Jsont.{mem,update_mem,delete_mem,fold_obj}" @@ fun () ->
+  Test.test "Jsont.{mem,*_mem,fold_object,filter_map_object}" @@ fun () ->
+  let o = {| { "a" : { "b" : 1 }, "c": 2 } |} in
+  (* Jsont.mem *)
   decode_ok Jsont.(mem "a" @@ mem "b" int) o ~value:1 ~__POS__;
-  update Jsont.(update_mem "a" @@ update_mem "b" (const int 3))
-    o {|{"a":{"b":3},"c":2}|} ~__POS__;
-  update Jsont.(update_mem "a" @@ update_mem "b" int_to_string)
-    o {|{"a":{"b":"1"},"c":2}|} ~__POS__;
+  decode_error Jsont.(mem "a" @@ mem "c" int) o ~__POS__;
+  decode_ok Jsont.(mem "a" @@ mem ~absent:3 "c" int) o ~value:3 ~__POS__;
+  (* Jsont.{update,set}_mem *)
+  update ~format:Jsont.Layout
+    Jsont.(update_mem "a" @@ update_mem "b" (const int 3))
+    o {| { "a" : { "b" : 3 }, "c": 2 } |} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(update_mem "a" @@ update_mem "b" recode_int_to_string)
+    o {| { "a" : { "b" : "1" }, "c": 2 } |} ~__POS__;
   decode_error
     Jsont.(update_mem "a" @@ update_mem "c" (const int 4)) o ~__POS__;
-(*  update
-    Jsont.(update_mem "a" @@ update_mem "c" ~absent:4 (const int 4)) o
-    {|{"a":{"b":1,"c":4},"c":2}|} ~__POS__; *)
+  update ~format:Jsont.Layout
+    Jsont.(update_mem "a" @@ update_mem "c" ~absent:4 (const int 5)) o
+    {| { "a" : { "b" : 1 ,"c":5}, "c": 2 } |} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(set_mem int "a" 2) o
+    {| { "a" : 2, "c": 2 } |} ~__POS__;
+  decode_error Jsont.(set_mem int "d" 2) o ~__POS__;
+  update ~format:Jsont.Layout Jsont.(set_mem ~allow_absent:true int "d" 3) o
+    {| { "a" : { "b" : 1 }, "c": 2 ,"d":3} |} ~__POS__;
+  (* Jsont.delete_mem *)
   decode_error Jsont.(update_mem "a" @@ delete_mem "c") o ~__POS__;
-  update Jsont.(update_mem "a" @@ delete_mem ~allow_absent:true "c")
-    o {|{"a":{"b":1},"c":2}|} ~__POS__;
-  update Jsont.(update_mem "a" @@ delete_mem "b")
-    o {|{"a":{},"c":2}|} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(update_mem "a" @@ delete_mem ~allow_absent:true "c")
+    o o ~__POS__;
+  update ~format:Jsont.Layout Jsont.(update_mem "a" @@ delete_mem "b")
+    o {| { "a" : {}, "c": 2 } |} ~__POS__;
+  update ~format:Jsont.Layout Jsont.(delete_mem "a")
+    o {| { "c": 2 } |} ~__POS__;
+  (* Jsont.filter_map_object *)
+  update ~format:Jsont.Layout
+    Jsont.(filter_map_object Jsont.json Jsont.json
+             (fun m n v -> if n = "a" then None else Some ((n, m), v)))
+    o {| { "c": 2 } |} ~__POS__;
+  (* Jsont.fold *)
   decode_ok Jsont.(mem "a" @@
-                   fold_object int (fun _ n v acc -> (n,v) :: acc) [])
-    o' ~value:["c", 1; "b", 0] ~__POS__;
-  update Jsont.(update_mem "a" @@
-                   filter_map_object int int
-                     (fun _ n v -> if n = "b"
-                       then None else Some (n ^ n, v + 1)))
-    o' {|{"a":{"cc":2}}|} ~__POS__;
+                   fold_object int (fun _ n i acc -> i + acc) 2)
+    o ~value:3 ~__POS__;
   ()
 
-let test_query_indexes () =
-  Test.test "query indexes" @@ fun () ->
-  let qstatus = Jsont.mem "status" Status.jsont in
-  let qprio = Jsont.mem "priority" ~absent:1 Jsont.int in
-  let snd_tag = Jsont.(mem "tags" @@ nth 1 Jsont.string) in
-  let trd_tag = Jsont.(mem "tags" @@ nth 2 ~absent:5 Jsont.int) in
-  decode_ok qstatus Item_data.i0_json ~value:Status.Todo ~__POS__;
-  decode_ok qprio Item_data.i0_json ~value:1 ~__POS__;
-  decode_ok snd_tag Item_data.i0_json ~value:"haha" ~__POS__;
-  decode_ok trd_tag Item_data.i0_json ~value:5 ~__POS__;
+let test_path_queries () =
+  Test.test "Jsont.{path,*_path}" @@ fun () ->
+  let v = {| [ 0, { "a": 1}, 2 ] |} in
+  (* Jsont.path *)
+  decode_error Jsont.(path Path.root int) v ~__POS__;
+  update ~format:Jsont.Layout Jsont.(path Path.root Jsont.json) v v ~__POS__;
+  decode_ok Jsont.(path Path.(root |> nth 1 |> mem "a") int) v ~value:1;
+  decode_ok Jsont.(path Path.(root |> nth 1 |> mem "b") ~absent:2 int) v
+    ~value:2 ~__POS__;
+  (* Jsont.{set,update}_path} *)
+  update ~format:Jsont.Layout Jsont.(set_path int Path.root 2)
+    v  {|2|} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(set_path string Path.(root |> nth 1 |> mem "a") "hey")
+    v {| [ 0, { "a": "hey"}, 2 ] |} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(set_path ~allow_absent:true
+             string Path.(root |> nth 1 |> mem "b") "hey")
+    v {| [ 0, { "a": 1,"b":"hey"}, 2 ] |} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(update_path Path.(root |> nth 1 |> mem "a")
+             (map int ~dec:succ ~enc:Fun.id))
+    v {| [ 0, { "a": 2}, 2 ] |} ~__POS__;
+  (* Jsont.delete_path *)
+  update ~format:Jsont.Layout
+    Jsont.(delete_path Path.(root |> nth 1 |> mem "a")) v
+    {| [ 0, {}, 2 ] |} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(delete_path Path.(root |> nth 1)) v
+    {| [ 0, 2 ] |} ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(delete_path Path.root) v
+    {|null|} ~__POS__;
+  decode_error Jsont.(delete_path Path.(root |> nth 1 |> mem "b")) v ~__POS__;
+  update ~format:Jsont.Layout
+    Jsont.(delete_path ~allow_absent:true Path.(root |> nth 1 |> mem "b"))
+    v v ~__POS__;
   ()
 
 let tests () =
@@ -554,5 +634,5 @@ let tests () =
   test_const ();
   test_array_queries ();
   test_object_queries ();
-  test_query_indexes ();
+  test_path_queries ();
   ()

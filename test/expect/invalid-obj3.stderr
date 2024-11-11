@@ -1,2 +1,2 @@
 jsont: [01;31mError[m: Expected [1m,[0m or [1m}[0m after [1mobject member[0m but found: [1mend of text[0m
-              File "invalid-obj3.json", line 2, characters -1-0
+              File "invalid-obj3.json", line 2, characters -1-0:

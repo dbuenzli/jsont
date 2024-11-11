@@ -9,19 +9,19 @@
     bidirectional map between subset of JSON values and arbitrary
     OCaml values. We call these values {e JSON types}.
 
-    In these maps we call {e decoding} the direction from JSON values
-    to OCaml values and {e encoding} the direction from OCaml values
-    to JSON values. Depending on your usage one direction or the other
-    can be left unspecified. Some of the maps may be lossy or creative
-    which leads to JSON queries and transforms.
+    In these maps the {e decoding} direction maps from JSON values to
+    OCaml values and the {e encoding} direction maps from OCaml values
+    to JSON values. Depending on your needs, one direction or the
+    other can be left unspecified. Some of the decoding maps may be
+    lossy or creative which leads to JSON queries and transforms.
 
-    See the {{!page-index.quick_start}quick start} and the
+    Read the {{!page-index.quick_start}quick start} and the
     {{!page-cookbook}cookbook}. *)
 
 (** {1:preliminaries Preliminaries} *)
 
 type 'a fmt = Format.formatter -> 'a -> unit
-(** The type for formatters of type ['a]. *)
+(** The type for formatters of values of type ['a]. *)
 
 (** Text locations.
 
@@ -69,9 +69,10 @@ module Textloc : sig
       (or the start of text for the first line). That byte position:
       {ul
       {- Indexes the first byte of text of the line if the line is non-empty.}
-      {- Indexes the first byte of the next {e newline} if the line is empty.}
+      {- Indexes the first byte of the next {e newline} sequence if the line
+         is empty.}
       {- Is out of bounds and equal to the text's length for a last empty
-         line (this includes when the text is empty).}} *)
+         line. This is also the case on empty text.}} *)
 
   val line_pos_first : line_pos
   (** [line_pos_first] is [1, 0]. Note that this is the only line position
@@ -190,15 +191,15 @@ module Textloc : sig
       convention}. *)
 
   val pp : Format.formatter -> t -> unit
-  (** [pp] is {!pp_gnu}. *)
+  (** [pp] is {!pp_ocaml}. *)
 
   val pp_dump : Format.formatter -> t -> unit
   (** [pp_dump] formats raw data for debugging. *)
 end
 
-(** Node metadata.
+(** Abstract syntax tree node metadata.
 
-    This type keeps information about source JSON text locations
+    This type keeps information about source text locations
     and whitespace. *)
 module Meta : sig
   type t
@@ -206,11 +207,15 @@ module Meta : sig
 
   val make : ?ws_before:string -> ?ws_after:string -> Textloc.t -> t
   (** [make textloc ~ws_before ~ws_after] is metadata with text location
-      [textloc]. *)
+      [textloc] whitespace [ws_before] before the node [ws_after] after
+      the node. Both default to [""]. *)
 
   val none : t
-  (** [none] is metadata for when there is none. Its {!Textloc.t}
+  (** [none] is metadata for when there is none. Its {!textloc}
       is {!Textloc.none} and its whitespace is empty. *)
+
+  val is_none : t -> bool
+  (** [is_non m] is [true] iff [m] is {!none}. *)
 
   val textloc : t -> Textloc.t
   (** [textloc m] is the text location of [m]. *)
@@ -226,15 +231,25 @@ module Meta : sig
 
   val clear_ws : t -> t
   (** [clear_ws m] is [m] with {!ws_before} and {!ws_after} set to [""]. *)
+
+  val clear_textloc : t -> t
+  (** [clear_textloc m] is [m] with {!textloc} set to {!Textloc.none}. *)
+
+  val copy_ws : t -> dst:t -> t
+  (** [copy_ws src dst] copies {!ws_before} and {!ws_after} of [src]
+      to [dst]. *)
 end
 
 type 'a node = 'a * Meta.t
-(** The type for JSON nodes. The data of type ['a] and its metadata. *)
+(** The type for abstract syntax tree nodes.
+    The node data of type ['a] and its metadata. *)
 
 (** JSON paths.
 
-    Paths are used for keeping track of encoding and decoding
-    {{!Context}contexts} and for specifying queries. *)
+    Paths are used for keeping track of erroring
+    {{!Error.Context.t}contexts} and for specifying {{:Jsont.query}
+    query and update}
+    locations. *)
 module Path : sig
 
   (** {1:indices Indices} *)
@@ -276,13 +291,111 @@ module Path : sig
 
   val of_string : string -> (t, string) result
   (** [of_string s] parses a path according to the
-      {{!Caret.path_caret_syntax}path syntax}. *)
+      {{!Path.path_syntax}path syntax}. *)
 
   val pp : t fmt
   (** [pp] formats paths. *)
 
   val pp_trace : t fmt
   (** [pp_trace] formats paths as a stack trace, if not empty. *)
+
+  (** {1:carets Carets} *)
+
+  (** Carets.
+
+      A path and a spatial localisation. *)
+  module Caret : sig
+
+    (** {1:caret Carets} *)
+
+    type path := t
+
+    type pos =
+    | Before (** The void before the data indexed by a path. *)
+    | Over (** The data indexed by a path. *)
+    | After (** The void after the data indexed by a path. *)
+    (** The type for caret positions. *)
+
+    type t = pos * path
+    (** The type for carets. A path and a caret position. *)
+
+    val of_string : string -> (t, string) result
+    (** [of_string s] parses a caret according to
+        the {{!path_caret_syntax}caret syntax} .*)
+
+    val pp : t fmt
+    (** [pp] formats carets. *)
+  end
+
+  val over : t -> Caret.t
+  (** [over p] is the data at the path [p]. *)
+
+  val before : t -> Caret.t
+  (** [before p] is the void before the path [p]. *)
+
+  val after : t -> Caret.t
+  (** [after p] is the void after the path [p]. *)
+
+  (** {1:path_caret_syntax Path & caret syntax}
+
+      Path and carets provide a way for end users to address JSON and
+      edit locations.
+
+      A {e path} is a sequence of member and list indexing
+      operations. Applying the path to a JSON value leads to either a
+      JSON value or nothing if one of the indices does not exist, or
+      an error if ones tries to index a non-indexable value.
+
+      A {e caret} is a path and a spatial specification for the JSON
+      construct found by the path. The caret indicates either the void
+      {e before} that JSON construct, the JSON value itself ({e over}) or
+      the void {e after} it.
+
+      Here are a few examples of paths and carets, syntactically the
+      charater ['v'] is used to denote the caret's insertion point before or
+      after a path. There's no distinction between a path and an over caret.
+
+      {@json[
+        {
+          "ocaml": {
+            "libs": ["jsont", "brr", "cmdliner"]
+          }
+        }
+      ]}
+
+      {@shell[
+      ocaml.libs        # value of member "libs" of member "ocaml"
+      ocaml.v[libs]     # void before the "libs" member
+      ocaml.[libs]v     # void after "libs" member
+
+      ocaml.libs.[0]    # first element of member "libs" of member "ocaml"
+      ocaml.libs.v[0]   # void before first element
+      ocaml.libs.[0]v   # void after first element
+
+      ocaml.libs.[-1]   # last element of member "libs" of member "ocaml"
+      ocaml.libs.v[-1]  # before last element (if any)
+      ocaml.libs.[-1]v  # after last element (if any)
+      ]}
+
+      More formally a {e path} is a [.] seperated list of indices.
+
+      An {e index} is written [[i]]. [i] can a zero-based list index
+      with negative indices counting from the end of the list ([-1] is
+      the last element). Or [i] can be an object member name [n]. If
+      there is no ambiguity, the surrounding brackets can be dropped.
+
+      A {e caret} is a path whose last index brackets can be prefixed or
+      suffixed by an insertion point, represented by the character
+      ['v'].  This respectively denote the void before or after the
+      JSON construct found by the path.
+
+      {b Notes.}
+      {ul
+      {- The syntax has no form of quoting at the moment this
+         means key names can't contain, [\[], [\]], or start with a number.}
+      {- It would be nice to be able to drop the dots in order
+         to be compatible with {{:https://www.rfc-editor.org/rfc/rfc9535}
+         JSONPath} syntax.}} *)
 end
 
 (** Sorts of JSON values. *)
@@ -301,96 +414,112 @@ module Sort : sig
 
   val pp : Format.formatter -> t -> unit
   (** [pp] formats sorts. *)
+
+  (** {1:kinds Kinds}
+
+      For formatting error messages. *)
+
+  val or_kind : kind:string -> t -> string
+  (** [or_kind ~kind s] is [to_string s] if [kind] is [""] and
+      [kind] otherwise. *)
+
+  val kinded : kind:string -> t -> string
+  (** [kinded ~kind s] is [to_string s] if [kind] is [""]
+      and [String.concat " " [kind; to_string s]] otherwise. *)
+
+  val kinded' : kind:string -> string -> string
+  (** [kinded' ~kind sort] is [sort] if [kind] is [""]
+      and [String.concat " " [kind; sort]] otherwise. *)
 end
 
 (** Encoding, decoding and query errors. *)
 module Error : sig
 
+  (** {1:kinds Kinds of errors} *)
+
+  type kind
+  (** The type for kind of errors. *)
+
+  val kind_to_string : kind -> string
+  (** [kind_to_string kind] is [kind] as a string. *)
+
+  (** {1:errors Errors} *)
+
   (** JSON error contexts. *)
   module Context : sig
-    type t = (string node * Path.index) list
-    (** The type for JSON encoding or decoding contexts. The kind
-        of array or object and its index. *)
+
+    type index = string node * Path.index
+    (** The type for context indices. The {{!Jsont.kinded_sort}kinded sort} of
+        an array or object its index. *)
+
+    type t = index list
+    (** The type for erroring contexts. The first element indexes the
+        root JSON value. *)
 
     val empty : t
     (** [empty] is the empty context. *)
 
     val is_empty : t -> bool
-    (** [is_empty c] is {!Path.is_root}[ (path c)]. *)
+    (** [is_empty ctx] is [true] iff [ctx] is {!empty}. *)
 
     val push_array : string node -> int node -> t -> t
-    (** [push_nth n] is a context for the [n]th element of an array. *)
+    (** [push_array kinded_sort n ctx] wraps [ctx] as the [n]th element of an
+        array of {{!Jsont.kinded_sort}kinded sort} [kinded_sort]. *)
 
     val push_object : string node -> string node -> t -> t
-    (** [push_mem n] is a context for the member named [n] of an object. *)
+    (** [push_object kinded_sort n ctx] wraps [ctx] as the member named [n] of
+        an object of {{!Jsont.kinded_sort}kinded sort} [kinded_sort]. *)
   end
 
-  type kind
-  (** The type for kind of errors. *)
-
   type t = Context.t * Meta.t * kind
-  (** The type for errors. *)
-
-  val to_string : t -> string
-  (** [error_to_string e] formats [e] using {!pp_error} to a string. *)
+  (** The type for errors. The context, the error localisation and the
+      kind of error. *)
 
   val make_msg : Context.t -> Meta.t -> string -> t
-  (** [make_msg ctx m msg] is an error with message [msg] for meta [m]
+  (** [make_msg ctx meta msg] is an error with message [msg] for meta [meta]
       in context [ctx]. *)
 
   val msg : Meta.t -> string -> 'a
-  (** [error ctx m msg] raises an error with message [msg] for meta
-      [m] in context [ctx]. *)
+  (** [msg meta msg] raises an error with message [msg] for meta
+      [meta] in an empty context. *)
 
   val msgf : Meta.t -> ('a, Stdlib.Format.formatter, unit, 'b) format4 -> 'a
-  (** [fmt] is like {!val-msg} but formats an error message. *)
+  (** [msgf meta fmt …] is like {!val-msg} but formats an error message. *)
 
   val push_array : string node -> int node -> t -> 'a
-  (** [push_array array_kind index e] pushes the given context
-      on [e] and raises. *)
+  (** [push_array kinded_sort n e] contextualises [e] as an error in the
+      [n]th element of an array {{!Jsont.kinded_sort}kinded sort}
+      [kinded_sort]. *)
 
   val push_object : string node -> string node -> t -> 'a
-  (** [push_object object_kind index e] pushes the given context
-      on [e] and raises. *)
+  (** [push_object kinded_sort n e] contextualises [e] as an error in
+      the member [n] of an object of {{!Jsont.kinded_sort}kinded sort}
+      [kinded_sort]. *)
+
+  val adjust_context :
+    first_byte:Textloc.byte_pos -> first_line:Textloc.line_pos -> t -> 'a
+  (** [adjust_context ~first_byte ~first_line] adjusts the error's
+      context's meta to encompass the given positions. *)
+
+  (** {1:fmt Formatting} *)
+
+  val to_string : t -> string
+  (** [error_to_string e] formats [e] using {!val-pp} to a string. *)
 
   val pp : t fmt
   (** [pp_error] formats errors. *)
 
-  (* FIXME some rationalized form of that is likely useful
-     for custom queries.
+  val puterr : unit fmt
+  (** [puterr] formats [Error:] in red. *)
 
-  val sort : Context.t -> Meta.t -> exp:Sort.t -> fnd:Sort.t -> 'a
-  (** [sort p m ~exp ~fnd] errors when sort [exp] was expected
-      but [fnd] was found. See also {!Jsont.Repr.type_error} *)
-
-  val kind : Context.t -> Meta.t -> exp:string -> fnd:Sort.t -> 'a
-  (** [error_kind p m ~exp ~fnd] errors when kind [exp] was expected
-      but sort [fnd] was found. See also {!Jsont.Repr.type_error}. *)
-  *)
-
-  val missing_mems :
-    Meta.t -> object_kind:string -> exp:string list ->
-    fnd:string list -> 'a
-  (** [missing_mems ctx m ~object_kind ~exp ~mems] errors when member
-      named [exp] were expected in an object of kind [object_kind] with
-      metadata [meta] but the object had only [fnd] names (leave empty
-      if the info is no longer available). [m]'s location should span
-      the object. *)
-
-  (*
-  val unexpected_mems :
-    Context.t -> Meta.t -> object_kind:string -> exp:string list ->
-    fnd:string list -> 'a
-  (** [unexpected_mems ctx m ~object_kind ~exp fnd] errors when member name
-      [n] is found in an object but of kind [object_kind] is not expected. TODO what does
-      meta represent. *)
-*)
+  (**/**)
+  val disable_ansi_styler : unit -> unit
+  (**/**)
 end
 
 exception Error of Error.t
 (** The exception raised on map errors. In general codec and query
-    functions turn that for you into a {!result} value, see for
-    example {{!Json.converting}these conversion} functions. *)
+    functions turn that for you into a {!result} value. *)
 
 (** {1:types Types} *)
 
@@ -400,16 +529,28 @@ type 'a t
     A value of this type represents a subset of JSON values mapped to
     a subset of values of type ['a] and vice versa. *)
 
-
-val value_kind : 'a t -> string
-(** [value_kind t] is a human readable string describing the JSON values typed
-    by [t]. *)
+val kinded_sort : 'a t -> string
+(** [kinded_sort t] is a human readable string describing the JSON
+    values typed by [t]. This combines the kind of the map with the
+    {{!Sort}sort}(s) of JSON value mapped by [t]. For example if [t]
+    is an object map and the kind specified for the
+    {{!Object.val-map}map} is ["T"] then this is ["T object"], if the
+    kind is empty this is simply ["object"]. See also
+    {!Sort.kinded}. *)
 
 val kind : 'a t -> string
-(** [kind t] is the [kind] of the underlying map. FIXME explain difference. *)
+(** [kind t] is the [kind] of the underlying map. If the kind is an
+    empty string this falls back to mention the {{!Sort}sort}. For
+    example if [t] is an object map and the kind specified for the
+    {{!Object.val-map}map} is ["T"] then this is ["T"], if the kind is
+    empty then this is ["object"]. See also {!Sort.or_kind}. *)
 
 val doc : 'a t -> string
 (** [doc t] is a documentation string for the JSON values typed by [t]. *)
+
+(** {1:base Base types}
+
+    Read the {{!page-cookbook.base_types}cookbook} on base types. *)
 
 (** Mapping JSON base types. *)
 module Base : sig
@@ -417,7 +558,7 @@ module Base : sig
   (** {1:maps Maps} *)
 
   type ('a, 'b) map
-  (** The type for mapping values of type ['a] to values of type ['b]. *)
+  (** The type for mapping JSON values of type ['a] to values of type ['b]. *)
 
   val map :
     ?kind:string -> ?doc:string -> ?dec:(Meta.t -> 'a -> 'b) ->
@@ -426,18 +567,17 @@ module Base : sig
   (** [map ~kind ~doc ~dec ~enc ~enc_meta ()] maps JSON base types
       represented by value of type ['a] to values of type ['b] with:
       {ul
-      {- [kind] names the entities represented by type ['b].
-         Defaults to [""].}
-      {- [doc] is a documentation string for [kind]. Defaults to [""].}
+      {- [kind] names the entities represented by the map and [doc]
+         documents them. Both default to [""].}
       {- [dec] is used to decode values of type ['a] to values of
-         type ['b]. Can be omitted if the result is only used for
+         type ['b]. Can be omitted if the map is only used for
          encoding, the default unconditionally errors.}
       {- [enc] is used to encode values of type ['b] to values of
-         type ['a]. Can be omitted if the result is only used for
+         type ['a]. Can be omitted if the map is only used for
          decoding, the default unconditionally errors.}
-      {- [enc_meta] is used to recover JSON metadata (e.g. source
+      {- [enc_meta] is used to recover JSON metadata (source text
          layout information) from a value to encode. The default
-         unconditionnaly returns {!Json.Meta.none}.}}
+         unconditionnaly returns {!Jsont.Meta.none}.}}
 
       {{!decenc}These functions} can be used to quickly devise
       [dec] and [enc] functions from standard OCaml conversion
@@ -450,45 +590,44 @@ module Base : sig
   (** [ignore] is the ignoring map. It ignores decodes and errors on
       encodes. *)
 
-  (** {1:types JSON types} *)
+  (** {2:types JSON types} *)
 
   val null : (unit, 'a) map -> 'a t
-  (** [null m] maps with [m] JSON nulls represented by [()] to
+  (** [null map] maps with [map] JSON nulls represented by [()] to
       values of type ['a]. See also {!Jsont.null}. *)
 
   val bool : (bool, 'a) map -> 'a t
-  (** [bool m] maps with [m] JSON booleans represented by [bool]
+  (** [bool map] maps with [map] JSON booleans represented by [bool]
       values to values of type ['a]. See also {!Jsont.bool}. *)
 
   val number : (float, 'a) map -> 'a t
-  (** [number m] maps with [m] JSON nulls or numbers represented by
+  (** [number map] maps with [map] JSON nulls or numbers represented by
       [float] values to values of type ['a]. The [float]
       representation decodes JSON nulls to {!Float.nan} and lossily
       encodes any {{!Float.is_finite}non-finite} to JSON null
-      ({{!page-cookbook.numbers_as_nulls}explanation}). See also
+      ({{!page-cookbook.non_finite_numbers}explanation}). See also
       {!Jsont.number}. *)
 
   val string : (string, 'a) map -> 'a t
-  (** [string m] maps with [m] unescaped JSON strings represented by
-      UTF-8 encoded [string] values to values of type ['a]. See also
-      {!Jsont.string}. *)
+  (** [string map] maps with [map] {e unescaped} JSON strings represented
+      by UTF-8 encoded [string] values to values of type ['a]. See
+      also {!Jsont.string}. *)
 
   (** {1:decenc Decoding and encoding functions}
 
       These function create suitable [dec] and [enc] functions
-      to give to {!map} from standard OCaml conversion interfaces. *)
+      to give to {!val-map} from standard OCaml conversion interfaces.
+      See also {!Jsont.of_of_string}. *)
 
   val dec : ('a -> 'b) -> (Meta.t -> 'a -> 'b)
   (** [dec f] is a decoding function from [f]. This assumes [f] never fails. *)
 
   val dec_result :
-    ?kind:string -> ('a -> ('b, string) result) ->
-    (Meta.t -> 'a -> 'b)
+    ?kind:string -> ('a -> ('b, string) result) -> (Meta.t -> 'a -> 'b)
   (** [dec f] is a decoding function from [f]. [Error _] values are given to
       {!Error.msg}, prefixed by [kind:] (if specified). *)
 
-  val dec_failure :
-    ?kind:string -> ('a -> 'b) -> (Meta.t -> 'a -> 'b)
+  val dec_failure : ?kind:string -> ('a -> 'b) -> (Meta.t -> 'a -> 'b)
   (** [dec f] is a decoding function from [f]. [Failure _] exceptions
       are catched and given to {!Error.msg}, prefixed by [kind:] (if
       specified). *)
@@ -496,418 +635,24 @@ module Base : sig
   val enc : ('b -> 'a) -> ('b -> 'a)
   (** [enc f] is an encoding function from [f]. This assumes [f] never fails. *)
 
-  val enc_result :
-    ?kind:string -> ('b -> ('a, string) result) -> ('b -> 'a)
+  val enc_result : ?kind:string -> ('b -> ('a, string) result) -> ('b -> 'a)
   (** [enc_result f] is an encoding function from [f]. [Error _] values are
-      given to {!Error.msg}, prefixed by [kind:] (if specified) *)
+      given to {!Error.msg}, prefixed by [kind:] (if specified). *)
 
-  val enc_failure :
-    ?kind:string -> ('b -> 'a) -> ('b -> 'a)
+  val enc_failure : ?kind:string -> ('b -> 'a) -> ('b -> 'a)
   (** [enc_failure f] is an encoding function from [f]. [Failure _]
       exceptions are catched and given to {!Error.msg}, prefixed by [kind:]
       (if specified). *)
 end
 
-(** Mapping JSON arrays. *)
-module Array : sig
+(** {2:option Nulls and options}
 
-  (** {1:maps Maps} *)
-
-  type ('array, 'elt) enc =
-    { enc : 'acc. ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc }
-  (** The type for specifying array encoding functions. A function to fold
-      over the elements of type ['elt] of the array of type ['array]. *)
-
-  type ('array, 'elt, 'builder) map
-  (** The type for mapping JSON arrays with elements of type ['elt] to arrays
-      of type ['array] using values of type ['builder] to build them. *)
-
-  val map :
-    ?kind:string -> ?doc:string ->
-    dec_empty:(unit -> 'builder) ->
-    ?dec_skip:(int -> 'builder -> bool) ->
-    dec_add:(int -> 'elt -> 'builder -> 'builder) ->
-    dec_finish:(Meta.t -> int -> 'builder -> 'array) ->
-    enc:('array, 'elt) enc ->
-    ?enc_meta:('array -> Meta.t) -> 'elt t ->
-    ('array, 'elt, 'builder) map
-  (** [map elt] maps JSON arrays of type ['elt] to arrays of
-      type ['array] built with type ['builder].
-      {ul
-      {- [kind] names the entities represented by type ['a].
-         Defaults to [""].}
-      {- [doc] is a documentation string for [kind]. Defaults to [""].}
-      {- [dec_empty] is used to create a builder for the empty array.}
-      {- [dec_add] is used to add the [i]th JSON element to the builder.}
-      {- [dec_skip] is used to skip the [i]th index of the JSON array.
-         If [true], the element is not decoded with [elt] and not added with
-         [dec_add] but skipped. Defaults returns always [false].}
-      {- [dec_finish b] converts the builder to the final array.}
-      {- [enc.enc ctx f acc v] folds over the elements of array [v] in
-         increasing order with [f] and starting with [acc] to encode it
-         in a JSON array.}
-      {- [enc_meta v] is the metadata to use for encoding [v] to a JSON
-         array.}} *)
-
-  val list_map :
-    ?kind:string -> ?doc:string ->
-    ?dec_skip:(int -> 'a list -> bool) -> 'a t ->
-    ('a list, 'a, 'a list) map
-  (** [list_map elt] maps JSON arrays with elements of type [elt]
-      to [list] values. See also {!Jsont.list}. *)
-
-  type 'a array_builder
-  (** The type for array builders. *)
-
-  val array_map :
-    ?kind:string -> ?doc:string ->
-    ?dec_skip:(int -> 'a array_builder -> bool) -> 'a t ->
-    ('a array, 'a, 'a array_builder) map
-  (** [array_map elt] maps JSON arrays with elements of type [elt]
-      to [array] values. See also {!Jsont.array}. *)
-
-  type ('a, 'b, 'c) bigarray_builder
-  (** The type for bigarray_builders. *)
-
-  val bigarray_map :
-    ?kind:string -> ?doc:string ->
-    ?dec_skip:(int -> ('a, 'b, 'c) bigarray_builder -> bool) ->
-    ('a, 'b) Bigarray.kind -> 'c Bigarray.layout -> 'a t ->
-    (('a, 'b, 'c) Bigarray.Array1.t, 'a, ('a, 'b, 'c) bigarray_builder) map
-  (** [bigarray k l elt] maps JSON arrays with elements of
-      type [elt] to bigarray values of kind [k] and layout [l].  See
-      also {!Jsont.bigarray}. *)
-
-  (** {1:types JSON types} *)
-
-  val array : ('a, _, _) map -> 'a t
-  (** [array m] maps with [m] JSON arrays to values of type ['a].
-      See the the {{!section-derived_arrays}array combinators}.  *)
-
-  val ignore : unit t
-  (** [ignore] ignores JSON arrays on decoding and errors on encoding. *)
-end
-
-(** Mapping JSON objects.
-
-    This module allows to describe JSON objects. See a
-    {{!page-cookbook.objects_as_records}simple example},
-    more examples can be found in the {{!page-cookbook}cookbook}. *)
-module Object : sig
-
-  (** {1:maps Object maps} *)
-
-  type ('o, 'dec) map
-  (** The type for mapping JSON objects to values of type ['o]. The
-      ['dec] type is used to construct ['o] from members see {!val-mem}. *)
-
-  val map : ?kind:string -> ?doc:string -> 'dec -> ('o, 'dec) map
-  (** [map dec] is an empty JSON object decoded by [dec].
-      {ul
-      {- [kind] documents the entities represented by type ['o].
-         Defaults to [""].}
-      {- [doc] is a documentation string for [kind]. Defaults to [""].}
-      {- [dec] is a constructor eventually returning a value of
-         type ['o] to be saturated with calls to {!val-mem}, {!val-case_mem}
-         or {!val-keep_unknown}. This is needed for decoding. Use {!enc_only}
-         if the result is only used for encoding.}} *)
-
-  val map' :
-    ?kind:string -> ?doc:string -> ?enc_meta:('o -> Meta.t) ->
-    (Meta.t -> 'dec) -> ('o, 'dec) map
-  (** [map' dec] is like {!val-map} except you get the meta
-      context in [dec] and [enc_meta] is used to recover it on encoding. *)
-
-  val enc_only :
-    ?kind:string -> ?doc:string -> ?enc_meta:('o -> Meta.t) -> unit ->
-    ('o, 'a) map
-  (** [enc_only ()] is like {!val-map'} but can only be used for
-      encoding. *)
-
-  val finish : ('o, 'o) map -> 'o t
-  (** [finish m] is a JSON type for objects mapped by [m].  Raises
-      [Invalid_argument] if [m] describes a member name more than
-      once. *)
-
-  val unfinish : 'o t -> ('o, 'o) map
-  (** [unfinish t] is the object description of [t]. Raises
-      [Invalid_argument] if [t] is not the result of {!finish}. *)
-
-  val kind : ('o, _) map -> string
-  (** [kind m] is the kind of object represented by ['o]. *)
-
-  (** {1:mems Members} *)
-
-  (** Member maps.
-
-      Usually it's better to use {!Jsont.Obj.mem} or {!Jsont.Obj.opt_mem}
-      directly. But this may be useful in certain abstraction contexts. *)
-  module Mem : sig
-
-    type ('o, 'dec) object_map := ('o, 'dec) map
-
-    type ('o, 'a) map
-    (** The type for mapping a member object to a value ['a] stored
-        in an OCaml value of type ['o]. *)
-
-    val map :
-      ?doc:string -> ?dec_absent:'a -> ?enc:('o -> 'a) ->
-      ?enc_meta:('a -> Meta.t) ->
-      ?enc_omit:('a -> bool) -> string -> 'a t -> ('o, 'a) map
-    (** [map name t] maps member named [name] of type [t] in an object
-        of type ['o]. See {!Jsont.Obj.mem} for the field semantics. *)
-
-    val app : ('o, 'a -> 'b) object_map -> ('o, 'a) map -> ('o, 'b) object_map
-    (** [app map mmap] applies the member map [map] to the contructor of
-        the object map [mmap]. In turn this adds the [map] member definition
-        to the object described by [map]. *)
-  end
-
-  val mem :
-    ?doc:string -> ?dec_absent:'a -> ?enc:('o -> 'a) ->
-    ?enc_meta:('a -> Meta.t) -> ?enc_omit:('a -> bool) -> string -> 'a t ->
-    ('o, 'a -> 'b) map -> ('o, 'b) map
-  (** [mem name t map] is a member named [name] of type
-      [t] for an object of type ['o] being constructed by [map].
-      {ul
-      {- [doc] is a documentation string for the member. Defaults to [""].}
-      {- [dec_absent], if specified, is the value used for the decoding
-         direction when the member named [named] is missing. If unspecified
-         decoding errors when the member is absent. See also {!opt_mem}
-         and {{!page-cookbook.optional_members}this example}.}
-      {- [enc] is used to project the member's value from the object
-         representation ['o] for encoding to JSON with [t]. It can be omitted
-         if the result is only used for decoding.}
-      {- [enc_omit] is for the encoding direction. If the member value returns
-         [true] the member is omited in the JSON. Defaults to [Fun.const false].
-         See {{!page-cookbook.optional_members}this example}.}} *)
-
-  val opt_mem :
-    ?doc:string -> ?enc:('o -> 'a option) -> string -> 'a t ->
-    ('o, 'a option -> 'b) map -> ('o, 'b) map
-  (** [opt_mem name t map] is:
-{[
-  Jsont.Object.mem name (Jsont.some t) map
-    ~dec_absent:None ~enc_omit:Option.is_none
-]}
-      A shortcut to represent optional members of type ['a] with ['a option]
-      values. *)
-
-  (** {1:cases Case objects}
-
-      This is for dealing with JSON object types or classes.
-      See {{!page-cookbook.cases}this example}. *)
-
-  (** Case objects.
-
-      Case objects are used to describe objects whose member list depend
-      on the tag value of a distinguished case member. See an
-      {{!page-cookbook.cases}example}. *)
-  module Case : sig
-
-    type 'a jsont := 'a t
-
-    type ('o, 'dec) object_map := ('o, 'dec) map
-
-    (** {1:cases Cases} *)
-
-    type ('cases, 'case, 'tag) map
-    (** The type for a case object represented by ['case] belonging to
-        a common type represented by ['cases] depending on the value
-        of a case member of type ['tag]. *)
-
-    type ('cases, 'tag) t
-    (** The type for a case part of the type ['cases]. This is
-        {!type-t} with its ['case] representation hidden. *)
-
-    type ('cases, 'tag) value
-    (** The type for case values. This holds a case value and
-        its case decription {!type-t}. Use {!val-value} to construct them. *)
-
-    val map :
-      ?dec:('case -> 'cases) -> 'tag -> 'case jsont ->
-      ('cases, 'case, 'tag) map
-    (** [map ~dec v obj] defines the object map [obj] as being the
-        case for the tag value [v] of the case member. [dec] indicates how to
-        inject the object case into the type for cases.
-
-        Raises [Invalid_argument] if [obj] is not a direct result of
-        {!finish}, that is does not describe an object. *)
-
-    val make : ('cases, 'case, 'tag) map -> ('cases, 'tag) t
-    (** [make cm] is [cm] as a case. *)
-
-    val value : ('cases, 'case, 'tag) map -> 'case -> ('cases, 'tag) value
-    (** [value c cv] is a case value [cv] described by [c]. *)
-  end
-
-  val case_mem :
-    ?doc:string -> ?tag_compare:('tag -> 'tag -> int) ->
-    ?tag_to_string:('tag -> string) -> ?dec_absent:'tag ->
-    ?enc:('o -> 'cases) -> ?enc_omit:('tag -> bool) ->
-    ?enc_case:('cases -> ('cases, 'tag) Case.value) -> string -> 'tag t ->
-    ('cases, 'tag) Case.t list -> ('o, 'cases -> 'a) map -> ('o, 'a) map
-  (** [case_mem name t cases map] is mostly like {!mem} except the member [name]
-      selects an object representation according to the member value of type
-      [t]:
-      {ul
-      {- [doc] is a documentation string for the member. Defaults to [""].}
-      {- [tag_compare] is used to compare tags. Defaults to {!Stdlib.compare}}
-      {- [tag_to_string] is used to stringify tags for improving
-         error reporting.}
-      {- [dec_absent], if specified, is the case value used for the decoding
-         direction when the case member named [name] is missing. If unspecified
-         decoding errors when the member is absent.}
-      {- [enc] is  used to project the value in which cases are stored
-         from the object representation ['o] for encoding to JSON. It
-         can be omitted if the result is only used for decoding.}
-      {- [enc_case] determines the actual case value from the value returned
-         by [enc].}
-      {- [cases] enumerates all the cases, it is needed for decoding.}}
-
-      [map], [name] and the object maps of cases must declare disjoint
-      member names otherwise [Invalid_argument] is raised on
-      {!finish}. Raises [Invalid_argument] if [case_mem] was already called
-      on map. *)
-
-  (** {1:unknown_members Unknown members}
-
-      These functions define the behaviour on unknown members.  By
-      default unknown members are skipped.
-
-      On {{!cases}case objects} each individual case has its own
-      behaviour unless the combinators are used on the case object map
-      in which case it overrides the behaviour of cases. For those
-      that use {!keep_unknown} they will get the result of an empty
-      builder in their decoding function and the encoder is ignored on
-      encode. *)
-
-  (** Uniform members. *)
-  module Mems : sig
-    type 'a jsont := 'a t
-
-    type ('mems, 'a, 'builder) map
-    (** The type for mapping members of type ['a] to values of type ['mems]. *)
-
-    type ('mems, 'a) enc =
-      { enc :
-          'acc. (Meta.t -> string -> 'a -> 'acc -> 'acc) ->
-          'mems -> 'acc -> 'acc }
-    (** The type for specifying unknown member folds. *)
-
-    val map :
-      ?kind:string -> ?doc:string -> 'a jsont ->
-      dec_empty:(unit -> 'builder) ->
-      dec_add:(Meta.t -> string -> 'a -> 'builder -> 'builder) ->
-      dec_finish:('builder -> 'mems) ->
-      enc:('mems, 'a) enc -> ('mems, 'a, 'builder) map
-      (** [map type' ~empty ~add ~fold] defines a structure of type
-          ['mems] to hold unknown members with values of type
-          ['a]. [empty] is the empty collection, [add] adds a member
-          to the collection and [fold] folds over it. See {!keep_unknown}. *)
-
-    val string_map :
-      ?kind:string -> ?doc:string -> 'a jsont ->
-      ('a Stdlib.Map.Make(String).t, 'a, 'a Stdlib.Map.Make(String).t) map
-      (** [string_map t] collects unknown member by name and types their
-          values with [t]. See {!keep_unknown} and see also {!as_string_map}. *)
-  end
-
-  val skip_unknown : ('o, 'dec) map -> ('o, 'dec) map
-  (** [skip_unknown map] makes [map] skip unknown members. This is the
-      default, no need to specify it. Raises [Invalid_argument] if
-      {!keep_unknown} was already specified on [map]. *)
-
-  val error_unknown : ('o, 'dec) map -> ('o, 'dec) map
-  (** [error_unknown m] makes [m] error on unknown members. Raises
-      [Invalid_argument] if {!keep_unknown} was already specified on
-      [map]. See {{!page-cookbook.erroring}this example}. *)
-
-  val keep_unknown :
-    ?enc:('o -> 'mems) -> ('mems, _, _) Mems.map ->
-    ('o, 'mems -> 'a) map -> ('o, 'a) map
-  (** [keep_unknown mems m] makes [m] keep unknown member with [mems].
-      Raises [Invalid_argument] if {!keep_unknown} was already
-      specified on [map]. See this {{!page-cookbook.keeping}this
-      example}. *)
-
-  (** {1:types JSON types } *)
-
-  val as_string_map :
-    ?kind:string -> ?doc:string -> 'a t -> 'a Stdlib.Map.Make(String).t t
-  (** [as_string_map t] maps object to key-value maps of type [t].
-      See also {!Mems.string_map}. *)
-
-  val ignore : unit t
-  (** [ignore] ignores JSON objects on decoding and errors on encoding. *)
-end
-
-val any :
-  ?kind:string -> ?doc:string -> ?dec_null:'a t -> ?dec_bool:'a t ->
-  ?dec_number:'a t -> ?dec_string:'a t -> ?dec_array:'a t ->
-  ?dec_object:'a t -> ?enc:('a -> 'a t) -> unit -> 'a t
-(** [any ()] maps subsets of JSON value of different sorts to values
-    of type ['a]. The unspecified cases are not part of the subset and
-    error on decoding. [enc] selects the type on encoding and errors
-    if omitted. [kind] is the kind of JSON value represented and [doc]
-    a documentation string. *)
-
-val map :
-  ?kind:string -> ?doc:string -> ?dec:('a -> 'b) ->
-  ?enc:('b -> 'a) -> 'a t -> 'b t
-(** [map t] changes the type of [t] from ['a] to ['b].
-    {ul
-    {- [kind] names the entities represented by type ['b].
-       Defaults to [""].}
-    {- [doc] is a documentation string for [kind]. Defaults to [""].}
-    {- [dec] decodes values of type ['a] to values of type ['b].
-       Can be omitted if the result is only used for
-       encoding. The default errors.}
-    {- [enc] encodes values of type ['b] to values of type ['a].
-       Can be omitted if the result is only used for
-       decoding. The default errors.}} *)
-
-val rec' : 'a t Lazy.t -> 'a t
-(** [rec'] maps recursive JSON values. See the {{!page-cookbook.recursion}
-    cookbook}. *)
-
-(** {2:ignoring Ignoring}
-
-    See also {!const}. *)
-
-val ignore : unit t
-(** [ignore] lossily maps all JSON values to [()] on decoding and
-    errors on encoding. *)
-
-val todo : ?kind:string -> ?doc:string -> ?dec_stub:'a -> unit -> 'a t
-(** [todo ?dec_stub ()]  maps all JSON values to [dec_stub] if
-    specified (errors otherwise) and errors on encoding. *)
-
-(** {2:base Base types} *)
+    Read the {{!page-cookbook.dealing_with_null}cookbook} on [null]s. *)
 
 val null : ?kind:string -> ?doc:string -> 'a -> 'a t
-(** [null v] maps JSON nulls to [v]. On encodes
-    any value of type ['a] is encoded by null. [doc] and [kind] are
-    given to the underlying {!Base.map}. See also {!Base.null}. *)
-
-val bool : bool t
-(** [bool] maps JSON booleans to [bool] values. See also {!Base.bool}. *)
-
-val number : float t
-(** [number] maps JSON nulls or numbers to [float] values.  On decodes
-    JSON null is mapped to {!Float.nan}. On encodes any
-    {{!Float.is_finite}non-finite} float is lossily mapped to JSON
-    null ({{!page-cookbook.numbers_as_nulls}explanation}). See also
-    {!Base.number}, {!any_float} and {{!ints}integer combinators}. *)
-
-val string : string t
-(** [string] maps unescaped JSON strings to UTF-8 encoded [string]
-    values. See also {!Base.string}.
-
-    {b Warning.} Encoders assume OCaml [string]s have been checked for
-    UTF-8 validity.  *)
-
-(** {2:option Options} *)
+(** [null v] maps JSON nulls to [v]. On encodes any value of type ['a]
+    is encoded by null. [doc] and [kind] are given to the underlying
+    {!Base.type-map}. See also {!Base.null}. *)
 
 val none : 'a option t
 (** [none] maps JSON nulls to [None]. *)
@@ -917,25 +662,45 @@ val some : 'a t -> 'a option t
     Encoding fails if the value is [None]. *)
 
 val option : ?kind:string -> ?doc:string -> 'a t -> 'a option t
-(** [option t] maps JSON nulls to [None] and other values by [t]. *)
+(** [option t] maps JSON nulls to [None] and other values by [t].
+    [doc] and [kind] are given to the underlying {!val-any} map. *)
 
-(** {2:ints Integers}
+(** {2:booleans Booleans} *)
 
-    See {{!page-cookbook.numbers_as_integers}this note} about (not)
-    representing integers by JSON number values. *)
+val bool : bool t
+(** [bool] maps JSON booleans to [bool] values. See also {!Base.bool}. *)
 
-val int : int t
-(** [int] maps truncated JSON numbers or JSON strings to [int] values.
-    {ul
-    {- JSON numbers are sucessfully decoded if after truncation they can
-       be represented on the [int] range, otherwise the decoder
-       errors. [int] values are encoded as JSON numbers if the
-       integer is in the \[-2{^53};2{^53}\] range.}
-    {- JSON strings are decoded using {!int_of_string_opt}, this
-       allows binary, octal, decimal and hex syntaxes and errors on
-       overflow and syntax errors. [int] values are encoded as JSON
-       strings with {!Int.to_string} when the integer is outside the
-       \[-2{^53};2{^53}\] range}} *)
+(** {2:numbers Numbers}
+
+    Read the {{!page-cookbook.dealing_with_numbers}cookbook} on JSON
+    numbers and their many pitfalls. *)
+
+val number : float t
+(** [number] maps JSON nulls or numbers to [float] values.  On decodes
+    JSON null is mapped to {!Float.nan}. On encodes any
+    {{!Float.is_finite}non-finite} float is lossily mapped to JSON
+    null ({{!page-cookbook.non_finite_numbers}explanation}). See also
+    {!Base.number}, {!any_float} and the integer combinators below. *)
+
+val any_float : float t
+(** [any_float] is a lossless representation for IEEE 754 doubles. It
+    maps {{!Float.is_finite}non-finite} floats by the JSON strings
+    defined by {!Float.to_string}. This contrasts with {!val-number}
+    which maps them to JSON null values
+    ({{!page-cookbook.non_finite_numbers}explanation}). Note that on
+    decodes this still maps JSON nulls to {!Float.nan} and any
+    successful string decode of {!Float.of_string_opt} (so numbers can
+    also be written as strings). See also {!val-number}.
+
+    {b Warning.} [any_float] should only be used between parties that
+    have agreed on such an encoding. To maximize interoperability you
+    should use the lossy {!val-number} map. *)
+
+val float_as_hex_string : float t
+(** [float_as_hex_string] maps JSON strings made of IEEE 754 doubles in hex
+    notation to float values. On encodes strings this uses the ["%h"]
+    format string. On decodes it accepts anything sucessfully decoded
+    by {!Float.of_string_opt}. *)
 
 val uint8 : int t
 (** [uint8] maps JSON numbers to unsigned 8-bit integers. JSON numbers
@@ -980,74 +745,165 @@ val int64 : int64 t
        strings with {!Int.to_string} when the integer is outside the
        \[-2{^53};2{^53}\] range}} *)
 
+val int64_as_string : int64 t
+(** [int64_as_string] maps JSON strings to 64-bit integers. On decodes
+    this uses {!Int64.of_string_opt} which allows binary, octal,
+    decimal and hex syntaxes and errors on overflow and syntax
+    errors. On encodes uses {!Int64.to_string}. *)
+
+val int : int t
+(** [int] maps truncated JSON numbers or JSON strings to [int] values.
+    {ul
+    {- JSON numbers are sucessfully decoded if after truncation they can
+       be represented on the [int] range, otherwise the decoder
+       errors. [int] values are encoded as JSON numbers if the
+       integer is in the \[-2{^53};2{^53}\] range.}
+    {- JSON strings are decoded using {!int_of_string_opt}, this
+       allows binary, octal, decimal and hex syntaxes and errors on
+       overflow and syntax errors. [int] values are encoded as JSON
+       strings with {!Int.to_string} when the integer is outside the
+       \[-2{^53};2{^53}\] range}}
+
+    {b Warning.} The behaviour of this function is platform
+    dependent, it depends on the value of {!Sys.int_size}. *)
+
 val int_as_string : int t
 (** [int_as_string] maps JSON strings to [int] values. On
     decodes this uses {!int_of_string_opt} which allows binary,
     octal, decimal and hex syntaxes and errors on overflow and
-    syntax errors. On encodes uses {!Int.to_string}. *)
+    syntax errors. On encodes uses {!Int.to_string}.
 
-val int64_as_string : int64 t
-(** [int64_as_string] maps JSON strings to 64-bit integers. On
-    decodes this uses {!Int64.of_string_opt} which allows binary,
-    octal, decimal and hex syntaxes and errors on overflow and
-    syntax errors. On encodes uses {!Int64.to_string}. *)
+    {b Warning.} The behaviour of this function is platform
+    dependent, it depends on the value of {!Sys.int_size}. *)
 
-(** {2:float Floats} *)
+(** {2:enums Strings and enums}
 
-val any_float : float t
-(** [any_float] is a lossless representation for IEEE 754 doubles. It
-    maps {{!Float.is_finite}non-finite} floats by the JSON
-    strings defined by {!Float.to_string}. This contrasts with
-    {!val-number} which maps them to JSON null values
-    ({{!page-cookbook.numbers_as_nulls}explanation}). Note that on
-    decodes this still maps JSON nulls to {!Float.nan} and any successful
-    string decode of {!Float.of_string_opt} (so numbers can also be written
-    as strings). See also {!val-number}.
+    Read the {{!page-cookbook.transform_strings}cookbook} on
+    transforming strings. *)
 
-    {b Warning.} [any_float] should only be used between parties that
-    have agreed on such an encoding. To maximize interoperability you
-    should rather use the lossy {!val-number} map. *)
+val string : string t
+(** [string] maps unescaped JSON strings to UTF-8 encoded [string]
+    values. See also {!Base.string}.
 
-val float_as_hex_string : float t
-(** [float_as_hex_string] maps JSON strings made of IEEE 754 doubles in hex
-    notation to float values. On encodes strings this uses the ["%h"]
-    format string. On decodes it accepts anything sucessfully decoded
-    by {!Float.of_string_opt}. *)
-
-(** {2:enums Strings and enums} *)
+    {b Warning.} Encoders assume OCaml [string]s have been checked for
+    UTF-8 validity.  *)
 
 val of_of_string : ?kind:string -> ?doc:string ->
   ?enc:('a -> string) -> (string -> ('a, string) result) -> 'a t
-(** [of_of_string of_string] maps JSON string with a {{!Base.map}base_map} using
-    [of_string] for decoding and [enc] for encoding. *)
+(** [of_of_string of_string] maps JSON string with a
+    {{!Base.type-map}base map} using [of_string] for decoding and [enc] for
+    encoding. See the {{!page-cookbook.transform_strings}cookbook}. *)
 
 val enum :
   ?cmp:('a -> 'a -> int) -> ?kind:string -> ?doc:string ->
   (string * 'a) list -> 'a t
 (** [enum assoc] maps JSON strings member of the [assoc] list to the
-    corresponding OCaml value and vice versa (in log(n)).
+    corresponding OCaml value and vice versa in log(n).
     [cmp] is used to compare the OCaml values, it defaults to {!Stdlib.compare}.
-    Decoding and encoding error on strings or values not part of
+    Decoding and encoding errors on strings or values not part of
     [assoc] *)
 
 val binary_string : string t
 (** [binary_string] maps JSON strings made of an even number of
-    hexdecimal ASCII upper or lower case digits to the corresponding
+    hexdecimal US-ASCII upper or lower case digits to the corresponding
     byte sequence. On encoding uses only lower case hexadecimal
     digits to encode the byte sequence. *)
 
-(** {2:derived_arrays Arrays and tuples}
+(** {1:arrays Arrays and tuples}
 
-    See also {{!array_queries}queries and updates}. *)
+    Read the {{!page-cookbook.dealing_with_arrays}cookbok} on arrays
+    and see also {{!array_queries}array queries and updates}. *)
 
-val list :
-  ?kind:string -> ?doc:string -> 'a t -> 'a list t
-(** [list t] maps JSON arrays of type [t] to [list] values.
-    See also {!Array.list_map}. *)
+(** Mapping JSON arrays. *)
+module Array : sig
+
+  (** {1:maps Maps} *)
+
+  type ('array, 'elt) enc =
+    { enc : 'acc. ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc }
+  (** The type for specifying array encoding functions. A function to fold
+      over the elements of type ['elt] of the array of type ['array]. *)
+
+  type ('array, 'elt, 'builder) map
+  (** The type for mapping JSON arrays with elements of type ['elt] to arrays
+      of type ['array] using values of type ['builder] to build them. *)
+
+  val map :
+    ?kind:string -> ?doc:string ->
+    dec_empty:(unit -> 'builder) ->
+    ?dec_skip:(int -> 'builder -> bool) ->
+    dec_add:(int -> 'elt -> 'builder -> 'builder) ->
+    dec_finish:(Meta.t -> int -> 'builder -> 'array) ->
+    enc:('array, 'elt) enc ->
+    ?enc_meta:('array -> Meta.t) -> 'elt t ->
+    ('array, 'elt, 'builder) map
+  (** [map elt] maps JSON arrays of type ['elt] to arrays of
+      type ['array] built with type ['builder].
+      {ul
+      {- [kind] names the entities represented by the map and [doc]
+         documents them. Both default to [""].}
+      {- [dec_empty ()] is used to create a builder for the empty array.}
+      {- [dec_skip i b] is used to skip the [i]th index of the JSON array.
+         If [true], the element is not decoded with [elt] and not added with
+         [dec_add] but skipped. The default always returns [false].}
+      {- [dec_add i v] is used to add the [i]th JSON element [v] $
+         decoded by [elt] to the builder [b].}
+      {- [dec_finish b] converts the builder to the final array.}
+      {- [enc.enc f acc a] folds over the elements of array [a] in
+         increasing order with [f] and starting with [acc]. This function
+         is used to encode [a] to a JSON array.}
+      {- [enc_meta a] is the metadata to use for encoding [v] to a JSON
+         array.}} *)
+
+  val list_map :
+    ?kind:string -> ?doc:string ->
+    ?dec_skip:(int -> 'a list -> bool) -> 'a t ->
+    ('a list, 'a, 'a list) map
+  (** [list_map elt] maps JSON arrays with elements of type [elt]
+      to [list] values. See also {!Jsont.list}. *)
+
+  type 'a array_builder
+  (** The type for array builders. *)
+
+  val array_map :
+    ?kind:string -> ?doc:string ->
+    ?dec_skip:(int -> 'a array_builder -> bool) -> 'a t ->
+    ('a array, 'a, 'a array_builder) map
+  (** [array_map elt] maps JSON arrays with elements of type [elt]
+      to [array] values. See also {!Jsont.array}. *)
+
+  type ('a, 'b, 'c) bigarray_builder
+  (** The type for bigarray_builders. *)
+
+  val bigarray_map :
+    ?kind:string -> ?doc:string ->
+    ?dec_skip:(int -> ('a, 'b, 'c) bigarray_builder -> bool) ->
+    ('a, 'b) Bigarray.kind -> 'c Bigarray.layout -> 'a t ->
+    (('a, 'b, 'c) Bigarray.Array1.t, 'a, ('a, 'b, 'c) bigarray_builder) map
+  (** [bigarray k l elt] maps JSON arrays with elements of
+      type [elt] to bigarray values of kind [k] and layout [l].  See
+      also {!Jsont.bigarray}. *)
+
+  (** {1:types JSON types} *)
+
+  val array : ('a, _, _) map -> 'a t
+  (** [array map] maps with [map] JSON arrays to values of type ['a].
+      See the the {{!section-arrays}array combinators}.  *)
+
+  val ignore : unit t
+  (** [ignore] ignores JSON arrays on decoding and errors on encoding. *)
+
+  val zero : unit t
+  (** [zero] ignores JSON arrays on decoding and encodes an empty array. *)
+end
+
+val list : ?kind:string -> ?doc:string -> 'a t -> 'a list t
+(** [list t] maps JSON arrays of type [t] to [list] values. See also
+    {!Array.list_map}. *)
 
 val array : ?kind:string -> ?doc:string -> 'a t -> 'a array t
-(** [array t] maps JSON arrays of type [t] to [array] values.
-    See also {!Array.array_map}. *)
+(** [array t] maps JSON arrays of type [t] to [array] values. See
+    also {!Array.array_map}. *)
 
 val array_as_string_map :
   ?kind:string -> ?doc:string -> key:('a -> string) -> 'a t ->
@@ -1083,16 +939,341 @@ val tn : ?kind:string -> ?doc:string -> n:int -> 'a t -> 'a array t
 (** [tn ~n t] maps JSON arrays of exactly [n] elements of type [t] to
     [array] values. This is {!val-array} limited by [n]. *)
 
+(** {1:objects Objects}
+
+    Read the {{!page-cookbook.dealing_with_objects}cookbook} on
+    objects. See a {{!page-cookbook.objects_as_records}simple
+    example}. See also {{!object_queries}object queries and
+    updates}. *)
+
+(** Mapping JSON objects.  *)
+module Object : sig
+
+  (** {1:maps Maps} *)
+
+  type ('o, 'dec) map
+  (** The type for mapping JSON objects to values of type ['o]. The
+      ['dec] type is used to construct ['o] from members see {!val-mem}. *)
+
+  val map : ?kind:string -> ?doc:string -> 'dec -> ('o, 'dec) map
+  (** [map dec] is an empty JSON object decoded by function [dec].
+      {ul
+      {- [kind] names the entities represented by the map and [doc]
+         documents them. Both default to [""].}
+      {- [dec] is a constructor eventually returning a value of
+         type ['o] to be saturated with calls to {!val-mem}, {!val-case_mem}
+         or {!val-keep_unknown}. This is needed for decoding. Use {!enc_only}
+         if the result is only used for encoding.}} *)
+
+  val map' :
+    ?kind:string -> ?doc:string -> ?enc_meta:('o -> Meta.t) ->
+    (Meta.t -> 'dec) -> ('o, 'dec) map
+  (** [map' dec] is like {!val-map} except you get the object's
+      decoding metdata in [dec] and [enc_meta] is used to recover it
+      on encoding. *)
+
+  val enc_only :
+    ?kind:string -> ?doc:string -> ?enc_meta:('o -> Meta.t) -> unit ->
+    ('o, 'a) map
+  (** [enc_only ()] is like {!val-map'} but can only be used for
+      encoding. *)
+
+  val finish : ('o, 'o) map -> 'o t
+  (** [finish map] is a JSON type for objects mapped by [map].  Raises
+      [Invalid_argument] if [map] describes a member name more than
+      once. *)
+
+  (** {1:mems Members} *)
+
+  (** Member maps.
+
+      Usually it's better to use {!Jsont.Object.mem} or {!Jsont.Object.opt_mem}
+      directly. But this may be useful in certain abstraction contexts. *)
+  module Mem : sig
+
+    type ('o, 'dec) object_map := ('o, 'dec) map
+
+    type ('o, 'a) map
+    (** The type for mapping a member object to a value ['a] stored
+        in an OCaml value of type ['o]. *)
+
+    val map :
+      ?doc:string -> ?dec_absent:'a -> ?enc:('o -> 'a) ->
+      ?enc_omit:('a -> bool) -> string -> 'a t -> ('o, 'a) map
+    (** See {!Jsont.Object.mem}. *)
+
+    val app : ('o, 'a -> 'b) object_map -> ('o, 'a) map -> ('o, 'b) object_map
+    (** [app map mmap] applies the member map [mmap] to the contructor of
+        the object map [map]. In turn this adds the [mmap] member definition
+        to the object described by [map]. *)
+  end
+
+  val mem :
+    ?doc:string -> ?dec_absent:'a -> ?enc:('o -> 'a) ->
+    ?enc_omit:('a -> bool) -> string -> 'a t -> ('o, 'a -> 'b) map ->
+    ('o, 'b) map
+  (** [mem name t map] is a member named [name] of type
+      [t] for an object of type ['o] being constructed by [map].
+      {ul
+      {- [doc] is a documentation string for the member. Defaults to [""].}
+      {- [dec_absent], if specified, is the value used for the decoding
+         direction when the member named [name] is missing. If unspecified
+         decoding errors when the member is absent. See also {!opt_mem}
+         and {{!page-cookbook.optional_members}this example}.}
+      {- [enc] is used to project the member's value from the object
+         representation ['o] for encoding to JSON with [t]. It can be omitted
+         if the result is only used for decoding.}
+      {- [enc_omit] is for the encoding direction. If the member value returned
+         by [enc] returns [true] on [enc_omit], the member is omited in the
+         encoded JSON object. Defaults to [Fun.const false].
+         See also {!opt_mem} and
+         {{!page-cookbook.optional_members}this example}.}} *)
+
+  val opt_mem :
+    ?doc:string -> ?enc:('o -> 'a option) -> string -> 'a t ->
+    ('o, 'a option -> 'b) map -> ('o, 'b) map
+  (** [opt_mem name t map] is:
+  {[
+    let dec_absent = None and enc_omit = Option.is_none in
+    Jsont.Object.mem name (Jsont.some t) map ~dec_absent ~enc_omit
+  ]}
+      A shortcut to represent optional members of type ['a] with ['a option]
+      values. *)
+
+  (** {1:cases Case objects}
+
+      Read the {{!page-cookbook.cases}cookbook} on case objects. *)
+
+  (** Case objects.
+
+      Case objects are used to describe objects whose members depend
+      on the tag value of a distinguished case member. See an
+      {{!page-cookbook.cases}example}. *)
+  module Case : sig
+
+    (** {1:maps Maps} *)
+
+    type 'a jsont := 'a t
+
+    type ('cases, 'case, 'tag) map
+    (** The type for mapping a case object represented by ['case] belonging to
+        a common type represented by ['cases] depending on the value
+        of a case member of type ['tag]. *)
+
+    val map :
+      ?dec:('case -> 'cases) -> 'tag -> 'case jsont ->
+      ('cases, 'case, 'tag) map
+    (** [map ~dec v obj] defines the object map [obj] as being the
+        case for the tag value [v] of the case member. [dec] indicates how to
+        inject the object case into the type common to all cases.
+
+        Raises [Invalid_argument] if [obj] is not a direct result of
+        {!finish}, that is if [obj] does not describe an object. *)
+
+    (** {1:cases Cases} *)
+
+    type ('cases, 'tag) t
+    (** The type for a case of the type ['cases]. This is
+        {!type-map} with its ['case] representation hidden. *)
+
+    val make : ('cases, 'case, 'tag) map -> ('cases, 'tag) t
+    (** [make map] is [map] as a case. *)
+
+    (** {1:case Case values} *)
+
+    type ('cases, 'tag) value
+    (** The type for case values. This holds a case value and
+        its case map {!type-map}. Use {!val-value} to construct them. *)
+
+    val value : ('cases, 'case, 'tag) map -> 'case -> ('cases, 'tag) value
+    (** [value map v] is a case value [v] described by [map]. *)
+  end
+
+  val case_mem :
+    ?doc:string -> ?tag_compare:('tag -> 'tag -> int) ->
+    ?tag_to_string:('tag -> string) -> ?dec_absent:'tag ->
+    ?enc:('o -> 'cases) -> ?enc_omit:('tag -> bool) ->
+    ?enc_case:('cases -> ('cases, 'tag) Case.value) -> string -> 'tag t ->
+    ('cases, 'tag) Case.t list -> ('o, 'cases -> 'a) map -> ('o, 'a) map
+  (** [case_mem name t cases map] is mostly like {!val-mem} except the member
+      [name] selects an object representation according to the member value of
+      type [t]:
+      {ul
+      {- [doc] is a documentation string for the member. Defaults to [""].}
+      {- [tag_compare] is used to compare tags. Defaults to {!Stdlib.compare}}
+      {- [tag_to_string] is used to stringify tags for improving
+         error reporting.}
+      {- [dec_absent], if specified, is the case value used for the decoding
+         direction when the case member named [name] is missing. If unspecified
+         decoding errors when the member is absent.}
+      {- [enc] is used to project the value in which cases are stored
+         from the object representation ['o] for encoding to JSON. It
+         can be omitted if the result is only used for decoding.}
+      {- [enc_case] determines the actual case value from the value returned
+         by [enc].}
+      {- [enc_omit] is used on the tag of the case returned by [enc_case]
+         to determine if the case member can be ommited in the encoded JSON
+         object}
+      {- [cases] enumerates all the cases, it is needed for decoding.}}
+
+      The names of the members of each case must be disjoint from [name]
+      or those of [map] otherwise [Invalid_argument] is raised on
+      {!finish}. Raises [Invalid_argument] if [case_mem] was already called
+      on map. *)
+
+  (** {1:unknown_members Unknown members}
+
+      Read the {{!page-cookbook.unknown_members}cookbook} on unknown object
+      members.
+
+      On {{!cases}case objects} each individual case has its own
+      behaviour unless the combinators are used on the case object map
+      in which case it overrides the behaviour of cases. For those
+      cases that use {!keep_unknown} they will get the result of an
+      empty builder in their decoding function and the encoder is
+      ignored on encode. *)
+
+  (** Uniform members. *)
+  module Mems : sig
+
+    (** {1:maps Maps} *)
+
+    type 'a jsont := 'a t
+
+    type ('mems, 'a) enc =
+      { enc :
+          'acc. (Meta.t -> string -> 'a -> 'acc -> 'acc) ->
+          'mems -> 'acc -> 'acc }
+    (** The type for specifying unknown members encoding function.
+        A function to fold over unknown members of uniform type ['a]
+        stored in a value of type ['mems]. *)
+
+    type ('mems, 'a, 'builder) map
+    (** The type for mapping members of uniform type ['a] to values of
+        type ['mems] using a builder of type ['builder]. *)
+
+    val map :
+      ?kind:string -> ?doc:string -> 'a jsont ->
+      dec_empty:(unit -> 'builder) ->
+      dec_add:(Meta.t -> string -> 'a -> 'builder -> 'builder) ->
+      dec_finish:(Meta.t -> 'builder -> 'mems) ->
+      enc:('mems, 'a) enc -> ('mems, 'a, 'builder) map
+    (** [map type'] maps unknown members of uniform type ['a]
+        to values of type ['mems] built with type ['builder].
+        {ul
+        {- [kind] names the entities represented by the map and [doc]
+           documents them. Both default to [""].}
+        {- [dec_empty] is used to create a builder for the members}
+        {- [dec_add meta name v b] is used to add a member named [name]
+           with meta [meta] with member value [v] to builder [b]}
+        {- [dec_finish meta b]  converts the builder to the final members
+           value. [meta] is the metadata of the object in which they were
+           found.}
+        {- [enc f mems acc] folds over the elements of [mems] starting
+           with [acc]. This function is used to encode the members}}
+        See {!keep_unknown}. *)
+
+    val string_map :
+      ?kind:string -> ?doc:string -> 'a jsont ->
+      ('a Stdlib.Map.Make(String).t, 'a, 'a Stdlib.Map.Make(String).t) map
+      (** [string_map t] collects unknown member by name and types their
+          values with [t]. See {!keep_unknown} and {!as_string_map}. *)
+  end
+
+  val skip_unknown : ('o, 'dec) map -> ('o, 'dec) map
+  (** [skip_unknown map] makes [map] skip unknown members. This is the
+      default, no need to specify it. Raises [Invalid_argument] if
+      {!keep_unknown} was already specified on [map]. *)
+
+  val error_unknown : ('o, 'dec) map -> ('o, 'dec) map
+  (** [error_unknown map] makes [map] error on unknown members. Raises
+      [Invalid_argument] if {!keep_unknown} was already specified on
+      [map]. See {{!page-cookbook.erroring}this example}. *)
+
+  val keep_unknown :
+    ?enc:('o -> 'mems) -> ('mems, _, _) Mems.map ->
+    ('o, 'mems -> 'a) map -> ('o, 'a) map
+  (** [keep_unknown mems map] makes [map] keep unknown member with [mems].
+      Raises [Invalid_argument] if {!keep_unknown} was already
+      specified on [map]. See this {{!page-cookbook.keeping}this
+      example}, {!Mems.string_map} and {!Jsont.json_mems}. *)
+
+  (** {1:types JSON types } *)
+
+  val as_string_map :
+    ?kind:string -> ?doc:string -> 'a t -> 'a Stdlib.Map.Make(String).t t
+  (** [as_string_map t] maps object to key-value maps of type [t].
+      See also {!Mems.string_map} and {!Jsont.json_mems}. *)
+
+  val zero : unit t
+  (** [zero] ignores JSON objects on decoding and encodes an empty object. *)
+end
+
+(** {1:any Any} *)
+
+val any :
+  ?kind:string -> ?doc:string -> ?dec_null:'a t -> ?dec_bool:'a t ->
+  ?dec_number:'a t -> ?dec_string:'a t -> ?dec_array:'a t ->
+  ?dec_object:'a t -> ?enc:('a -> 'a t) -> unit -> 'a t
+(** [any ()] maps subsets of JSON value of different sorts to values
+    of type ['a]. The unspecified cases are not part of the subset and
+    error on decoding. [enc] selects the type to use on encoding and errors
+    if omitted. [kind] names the entities represented by the type and [doc]
+    documents them, both defaults to [""]. *)
+
+(** {1:maps Maps & recursion} *)
+
+val map :
+  ?kind:string -> ?doc:string -> ?dec:('a -> 'b) ->
+  ?enc:('b -> 'a) -> 'a t -> 'b t
+(** [map t] changes the type of [t] from ['a] to ['b].
+    {ul
+    {- [kind] names the entities represented by the type and [doc]
+       documents them, both default to [""].}
+    {- [dec] decodes values of type ['a] to values of type ['b].
+       Can be omitted if the result is only used for
+       encoding. The default errors.}
+    {- [enc] encodes values of type ['b] to values of type ['a].
+       Can be omitted if the result is only used for
+       decoding. The default errors.}} *)
+
+val iter :
+  ?kind:string -> ?doc:string -> ?dec:('a -> unit) -> ?enc:('a -> unit) ->
+  'a t -> 'a t
+(** [iter ?enc dec t] applies [dec] on decoding and [enc] on encoding
+    but otherwise behaves like [t] does. Typically [dec] can be used
+    to further assert the shape of the decoded value and {!Error.msgf}
+    if it hasn't the right shape. [iter] can also be used as a tracing
+    facility for debugging. *)
+
+val rec' : 'a t Lazy.t -> 'a t
+(** [rec'] maps recursive JSON values. See the {{!page-cookbook.recursion}
+    cookbook}. *)
+
+(** {1:ignoring Ignoring} *)
+
+val ignore : unit t
+(** [ignore] lossily maps all JSON values to [()] on decoding and
+    errors on encoding. See also {!const}. *)
+
+val zero : unit t
+(** [zero] lossily maps all JSON values to [()] on decoding and
+    encodes JSON nulls. *)
+
+val todo : ?kind:string -> ?doc:string -> ?dec_stub:'a -> unit -> 'a t
+(** [todo ?dec_stub ()]  maps all JSON values to [dec_stub] if
+    specified (errors otherwise) and errors on encoding. *)
+
 (** {1:generic_json Generic JSON} *)
 
 type name = string node
 (** The type for JSON member names. *)
 
 type mem = name * json
-(** The type for JSON object members. *)
+(** The type for generic JSON object members. *)
 
 and object' = mem list
-(** The type for JSON objects. *)
+(** The type for generic JSON objects. *)
 
 and json =
 | Null of unit node
@@ -1109,43 +1290,97 @@ module Json : sig
 
   (** {1:json JSON values} *)
 
-  val meta : json -> Meta.t
-  (** [meta v] is the metadata of value [v]. *)
-
-  val sort : json -> Sort.t
-  (** [sort v] is the sort of value [v]. *)
-
-  val find_mem : string -> object' -> mem option
-  (** [find_mem n ms] find the first member whose name matches [n] in [ms]. *)
-
-  val find_mem' : name -> object' -> mem option
-  (** [find_mem n ms] is [find_mem (fst n) ms]. *)
-
-  val object_names : object' -> string list
-  (** [object_names ms] are the names [ms]. *)
-
-  val object_names' : object' -> name list
-  (** [object_names ms] are the names [ms]. *)
-
-  (** {1:cons Constructors} *)
+  type 'a jsont := 'a t
 
   type 'a cons = ?meta:Meta.t -> 'a -> json
   (** The type for constructing JSON values from an OCaml value of type ['a].
       [meta] defaults to {!Meta.none}. *)
 
-  (** {2:base Base types} *)
+  type t = json
+  (** See {!Jsont.val-json}. *)
+
+  val meta : json -> Meta.t
+  (** [meta v] is the metadata of value [v]. *)
+
+  val set_meta : Meta.t -> json -> json
+  (** [set_meta m v] replaces [v]'s meta with [m]. *)
+
+  val copy_layout : json -> dst:json -> json
+  (** [copy_layout src ~dst] copies the layout of [src] and sets
+      it on [dst] using {!Meta.copy_ws}. *)
+
+  val sort : json -> Sort.t
+  (** [sort v] is the sort of value [v]. *)
+
+  val zero : json cons
+  (** [zero j] is a stub value of the sort value of [j]. The stub
+      value is the “natural” zero: null, false, 0, empty string,
+      empty array, empty object. *)
+
+  val equal : json -> json -> bool
+  (** [equal j0 j1] is {!compare}[ j0 j1 = 0]. *)
+
+  val compare : json -> json -> int
+  (** [compare j0 j1] is a total order on JSON values:
+      {ul
+      {- Floating point values are compared with {!Float.compare},
+         this means NaN values are equal.}
+      {- Strings are compared byte wise.}
+      {- Objects members are sorted before being compared.}
+      {- {!Meta.t} values are ignored.}} *)
+
+  val pp : t fmt
+  (** See {!Jsont.pp_json}. *)
+
+  (** {2:null Nulls and options} *)
 
   val null : unit cons
   (** [null] is [Null (unit, meta)]. *)
 
+  val option : 'a cons -> 'a option cons
+  (** [option c] constructs [Some v] values with [c v] and [None] ones
+      with {!val-null}. *)
+
+  (** {2:bool Booleans} *)
+
   val bool : bool cons
   (** [bool b] is [Bool (b, meta)]. *)
+
+  (** {2:numbers Numbers} *)
 
   val number : float cons
   (** [number n] is [Number (n, meta)]. *)
 
+  val any_float : float cons
+  (** [any_float v] is [number v] if {!Float.is_finite}[ v] is [true]
+      and [string (Float.to_string v)] otherwise. See {!Jsont.any_float}. *)
+
+  val int32 : int32 cons
+  (** [int32] is [i] as a JSON number. *)
+
+  val int64 : int64 cons
+  (** [int64 i] is [i] as a JSON number or a JSON string if
+      not in the range \[-2{^53};2{^53}\]. See also {!int64_as_string}. *)
+
+  val int64_as_string : int64 cons
+  (** [int64_as_string i] is [i] as a JSON string. See also {!int64}. *)
+
+  val int : int cons
+  (** [int] is [i] as a JSON number or a JSON string if not
+      in the range \[-2{^53};2{^53}\]. See also {!int_as_string}. *)
+
+  val int_as_string : int cons
+  (** [int_as_string i] is [i] as a JSON string. See also {!int}. *)
+
+  (** {2:strings Strings} *)
+
   val string : string cons
   (** [string s] is [String (s, meta)]. *)
+
+  (** {2:arrays Arrays} *)
+
+  val list : json list cons
+  (** [list l] is [Array (l, meta)]. *)
 
   val array : json array cons
   (** [array l] is [Array (Array.to_list a, meta)]. See also {!list}. *)
@@ -1161,90 +1396,57 @@ module Json : sig
   val object' : object' cons
   (** [object o] is [Object (o, meta)]. *)
 
-  (** {2:derived Derived} *)
+  val find_mem : string -> object' -> mem option
+  (** [find_mem n ms] find the first member whose name matches [n] in [ms]. *)
 
-  val option : 'a cons -> 'a option cons
-  (** [option c] constructs [Some v] values with [c v] and [None] ones
-      with {!null}. *)
+  val find_mem' : name -> object' -> mem option
+  (** [find_mem n ms] is [find_mem (fst n) ms]. *)
 
-  val list : json list cons
-  (** [list l] is [Array (l, meta)]. *)
+  val object_names : object' -> string list
+  (** [object_names ms] are the names of [ms]. *)
 
-  val int : int cons
-  (** [int] is [i] as a JSON number or a JSON string if not
-        in the range \[-2{^53};2{^53}\]. See also {!int_as_string}. *)
+  val object_names' : object' -> name list
+  (** [object_names ms] are the names of [ms]. *)
 
-  val int32 : int32 cons
-  (** [int32] is [i] as a JSON number. *)
+  (** {1:decode Decode} *)
 
-  val int64 : int64 cons
-    (** [int64 i] is [i] as a JSON number or a JSON string if
-        not in the range \[-2{^53};2{^53}\]. See also {!int64_as_string}. *)
-
-  val int_as_string : int cons
-  (** [int_as_string i] is [i] as a JSON string. See also {!int}. *)
-
-  val int64_as_string : int64 cons
-  (** [int64_as_string i] is [i] as a JSON string. See also {!int64}. *)
-
-  val any_float : float cons
-  (** [any_float v] is [number v] if {!Float.is_finite}[ v] is [true]
-        and [string (Float.to_string v)] otherwise. See {!Jsont.any_float}. *)
-
-  val stub : json cons
-  (** [stub j] is a stub value of the sort value of [j]. The stub
-      value is the “natural” zero: null, false, 0, empty string,
-      empty array, empty object. *)
-
-  (** {1:converting Converting} *)
-
-  val decode : 'a t -> json -> ('a, string) result
-  (** [dcode t j] decodes a value from the generic JSON [j] according
+  val decode : 'a jsont -> json -> ('a, string) result
+  (** [decode t j] decodes a value from the generic JSON [j] according
       to type [t]. *)
 
-  val decode' : 'a t -> json -> ('a, Error.t) result
-  (** [decode'] is like {!decode} but preserves the error structure. *)
+  val decode' : 'a jsont -> json -> ('a, Error.t) result
+  (** [decode'] is like {!val-decode} but preserves the error structure. *)
 
-  val encode : 'a t -> 'a -> (json, string) result
+  (** {1:encode Encode} *)
+
+  val encode : 'a jsont -> 'a -> (json, string) result
   (** [encode t v] encodes a generic JSON value for [v] according
-      to type [t]. [ctx] default to {!Contet.root}. *)
+      to type [t]. *)
 
-  val encode' : 'a t -> 'a -> (json, Error.t) result
-  (** [encode'] is like {!encode} but preserves the error structure. *)
+  val encode' : 'a jsont -> 'a -> (json, Error.t) result
+  (** [encode'] is like {!val-encode} but preserves the error structure. *)
 
-  (* TODO
+  (** {1:recode Recode} *)
+
+  val recode : 'a jsont -> json -> (json, string) result
+  (** [recode t v] decodes [v] with [t] and encodes it with [t]. *)
+
+  val recode' : 'a jsont -> json -> (json, Error.t) result
+  (** [recode'] is like {!val-recode} but preserves the error structure. *)
+
+  val update : 'a jsont -> json -> json
+  (** [update] is like {!val-recode} but raises {!Jsont.exception-Error}. *)
+
   (** {1:errors Errors} *)
 
-  val error_sort : Context.t -> exp:Sort.t -> json -> 'a
-  (** [error_sort ctx ~exp fnd] errors when sort [exp] was expected
-        but generic JSON [fnd] was found. *)
+  val error_sort : exp:Sort.t -> json -> 'a
+  (** [error_sort ~exp fnd] errors when sort [exp] was expected but
+      generic JSON [fnd] was found. *)
 
-  val error_type : Context.t -> 'a t -> json -> 'a
-  (** [error_type ctx ~exp fnd] is [error_kind ctx ~exp:(kind t) fnd]. *)
-*)
-
-  (** {1:std Standard module interface} *)
-
-  type t = json
-  (** See {!json}. *)
-
-  val equal : t -> t -> bool
-  (** [equal j0 j1] is {!compare}[ j0 j1 = 0]. *)
-
-  val compare : t -> t -> int
-  (** [compare j0 j1] is a total order on JSON values:
-      {ul
-      {- Floating point values are compared with {!Float.compare},
-         this means NaN values are equal.}
-      {- Strings are compared byte wise.}
-      {- Objects members are sorted before being compared.}
-      {- Metadata is ignored.}} *)
-
-  val pp : t fmt
-  (** See {!Jsont.pp_json}. *)
+  val error_type : 'a jsont -> json -> 'a
+  (** [error_type t fnd] errors when the type expected by [t]
+      does not match [fnd]. *)
 end
-
-(** {2:gen_json_types Types} *)
 
 val json : json t
 (** [json] maps any JSON value to its generic representation. *)
@@ -1257,7 +1459,7 @@ val json_bool : json t
 
 val json_number : json t
 (** [json_number] maps JSON nulls or numbers
-    ({{!page-cookbook.numbers_as_nulls}explanation}) to their generic
+    ({{!page-cookbook.non_finite_numbers}explanation}) to their generic
     representation. *)
 
 val json_string : json t
@@ -1271,12 +1473,12 @@ val json_object : json t
 
 val json_mems : (json, json, mem list) Object.Mems.map
 (** [json_mems] is a members map collecting unknown members into a
-    generic JSON object. *)
+    generic JSON object. See {{!page-cookbook.keeping}this example}. *)
 
 (** {1:queries Queries and updates}
 
     Queries are lossy or aggregating decodes. Updates decode to
-    {!json} values but transform the data along the way. They allow to
+    {!type-json} values but transform the data along the way. They allow to
     process JSON data without having to fully model it
     (see the update example in the {{!page-index.quick_start}quick start}). *)
 
@@ -1295,7 +1497,7 @@ recode ~dec:int (fun _ i -> string_of_int s) ~enc:string
 
 val update : 'a t -> json t
 (** [update t] decodes any JSON with [t] and directly encodes it back
-    with [t] to yield the decode result. Encodes any JSON like {!json}
+    with [t] to yield the decode result. Encodes any JSON like {!val-json}
     does. *)
 
 (** {2:array_queries Arrays} *)
@@ -1311,15 +1513,16 @@ val set_nth : ?stub:json -> ?allow_absent:bool -> 'a t -> int -> 'a -> json t
     [v] encoded by [t]. Other indices are left untouched. Errors if
     there is no such index unless [~allow_absent:true] is specified in
     which case the index is created preceeded by as many [stub]
-    indices as needed. [stub] defaults to {!Json.stub} applied to the
-    value [v] encoded by [t]. Encodes like {!json_array} does. *)
+    indices as needed. [stub] defaults to {!Json.zero} applied to the
+    value [v] encoded by [t] (i.e. the "natural zero" of [v]'s encoding sort).
+    Encodes like {!json_array} does. *)
 
-val update_nth : ?stub:json -> ?absent:json -> int -> 'a t -> json t
+val update_nth : ?stub:json -> ?absent:'a -> int -> 'a t -> json t
 (** [update_nth n t] on decode recodes the [n]th value of a JSON array
     with [t]. Errors if there is no such index unless [absent] is
     specified in which case the index is created with [absent],
-    recoded with [t] and preceeded by as many [stub] values as
-    needed. [stub] defaults to {!Json.stub} applied to the recode.
+    encoded with [t] and preceeded by as many [stub] values as
+    needed. [stub] defaults to {!Json.zero} applied to the recode.
     Encodes like {!json_array} does. *)
 
 val delete_nth : ?allow_absent:bool -> int -> json t
@@ -1337,7 +1540,7 @@ val fold_array : 'a t -> (int -> 'a -> 'b -> 'b) -> 'b -> 'b t
 (** [fold_array t f acc] fold [f] over the [t] elements of a JSON
     array starting with [acc]. Encodes an empty JSON array. *)
 
-(** {2:objects Objects} *)
+(** {2:object_queries Objects} *)
 
 val mem : ?absent:'a -> string -> 'a t -> 'a t
 (** [mem name t] decodes the member named [name] of a JSON object with
@@ -1352,12 +1555,12 @@ val set_mem : ?allow_absent:bool -> 'a t -> string -> 'a -> json t
     [allow_absent:true] is specified in which case a member is added
     to the object. *)
 
-val update_mem : ?absent:json -> string -> 'a t -> json t
+val update_mem : ?absent:'a -> string -> 'a t -> json t
 (** [update_mem name t] recodes the member value of [name] of a JSON
     object with [t]. This happens both on decodes and encodes.  Errors
     if there is no such member unless [absent] is specified in which
-    case a member with this value is added to the object and recoded
-    with [t]. *)
+    case a member with this value encoded with [t] is added to the
+    object. *)
 
 val delete_mem : ?allow_absent:bool -> string -> json t
 (** [delete_mem name] deletes the member named [name] of a JSON object
@@ -1366,128 +1569,49 @@ val delete_mem : ?allow_absent:bool -> string -> json t
     in which case the data is left untouched. Encodes generic JSON
     objects like {!json_object} does. *)
 
+val filter_map_object :
+  'a t -> 'b t -> (Meta.t -> string -> 'a -> (name * 'b) option) -> json t
+(** [filter_map_object a b f] maps the [a] members of a JSON object
+    with [f] to [(n, b)] members or deletes them on [None]. The meta
+    given to [f] is the meta of the member name. Encodes generic JSON
+    arrays like {!json_object} does. *)
+
 val fold_object : 'a t -> (Meta.t -> string -> 'a -> 'b -> 'b) -> 'b -> 'b t
 (** [fold_object t f acc] folds [f] over the [t] members of a JSON object
     starting with [acc]. Encodes an empty JSON object. *)
 
-val filter_map_object :
-  'a t -> 'b t -> (Meta.t -> string -> 'a -> (string * 'b) option) -> json t
-(** [filter_map_object a b f] maps the [a] members of a JSON object with
-    [f] to [(n, b)] members or deletes them on [None]. Encodes generic
-    JSON arrays like {!json_object} does. *)
-
-(** {2:indices Indices} *)
+(** {2:index_queries Indices} *)
 
 val index : ?absent:'a -> Path.index -> 'a t -> 'a t
-(** [index] uses {!nth} or {!mem} on the given index. *)
+(** [index] uses {!val-nth} or {!val-mem} on the given index. *)
 
 val set_index : ?allow_absent:bool -> 'a t -> Path.index -> 'a -> json t
 (** [set_index] uses {!set_nth} or {!set_mem} on the given index. *)
 
-val update_index : ?stub:json -> ?absent:json -> Path.index -> 'a t -> json t
+val update_index : ?stub:json -> ?absent:'a -> Path.index -> 'a t -> json t
 (** [update_index] uses {!update_nth} or {!update_mem} on the given index. *)
 
 val delete_index : ?allow_absent:bool ->  Path.index -> json t
 (** [delete_index] uses {!delete_nth} or {!delete_mem} on the given index. *)
 
-(** {2:paths Paths} *)
+(** {2:path_queries Paths} *)
 
 val path : ?absent:'a -> Path.t -> 'a t -> 'a t
-(** [path p t] {{!index}decodes} with [t] on the last index of [p]. On
-    the {!root} path this is [t]. *)
+(** [path p t] {{!index}decodes} with [t] on the last index of [p]. If
+    [p] is {!Path.root} this is [t]. *)
 
 val set_path :
   ?stub:json -> ?allow_absent:bool -> 'a t -> Path.t -> 'a -> json t
-(** [set_path t p v] {{!set_index}sets} the last index of [p]. On
-    the root paths this results in the encoding of [v]. *)
+(** [set_path t p v] {{!set_index}sets} the last index of [p]. If [p]
+    is {!Path.root} this encodes [v] with [t]. *)
 
-val update_path : ?stub:json -> ?absent:json -> Path.t -> 'a t -> json t
+val update_path : ?stub:json -> ?absent:'a -> Path.t -> 'a t -> json t
 (** [update_path p t] {{!update_index}updates} the last index of [p] with
     [t]. On the root path this is [t]. *)
 
 val delete_path : ?allow_absent:bool -> Path.t -> json t
-(** [delete_path p] {{!delete_index}deletes} the last index of [p]. On
-    the root path this results in {!Json.null}[ ()]. *)
-
-(** {1:carets Carets} *)
-
-(** JSON carets (TODO). *)
-module Caret : sig
-
-  (** {1:caret Carets} *)
-
-  type pos =
-  | Before (** The void before the data indexed by a path. *)
-  | Over (** The data indexed by a path. *)
-  | After (** The void after the data indexed by a path. *)
-  (** The type for caret positions. *)
-
-  type t = Path.t * pos
-  (** The type for carets. A path and the caret position. *)
-
-  val of_string : string -> (t, string) result
-  (** [of_string s] parses a caret according to
-      the {{!path_caret_syntax}caret syntax} .*)
-
-  val pp : t fmt
-  (** [pp] formats carets. *)
-
-  (** {1:path_caret_syntax Path & caret end-user syntax}
-
-      Path and carets provide a way for end users to address JSON and
-      edit locations.
-
-      A {e path} is a sequence of key and list indexing
-      operations. Applying the path to a JSON value leads to a JSON
-      construct or nothing if one of the indices does not exist, or an
-      error if ones tries to index a non-indexable value.
-
-      A {e caret} is a path and a spatial specification for the JSON
-      construct found by the path. The caret indicates either the void
-      {e before} that JSON construct, the JSON value itself ({e over}) or
-      the void {e after} it.
-
-      Here are a few examples of paths and carets, syntactically the
-      charater ['v'] is used to denote the caret's insertion point before or
-      after a path. There's no distinction between a path and an over caret.
-
-{@json[
-{ "ocaml":
-      { "libs": ["jsont", "brr", "cmdliner"] }}
-]}
-
-{@shell[
-ocaml.libs        # value of member "libs" of member "ocaml"
-ocaml.v[libs]     # void before the "libs" member
-ocaml.[libs]v     # void after "libs" member
-
-ocaml.libs.[0]    # first element of member "libs" of member "ocaml"
-ocaml.libs.v[0]   # void before first element
-ocaml.libs.[0]v   # void after first element
-
-ocaml.libs.[-1]   # last element of member "libs" of member "ocaml"
-ocaml.libs.v[-1]  # before last element (if any)
-ocaml.libs.[-1]v  # after last element (if any)
-]}
-
-    More formally a {e path} is a [.] seperated list of indices.
-
-    An {e index} is written [[i]]. [i] can a zero-based list index
-    with negative indices counting from the end of the list ([-1] is
-    the last element). Or [i] can be an object member name [n]. If there
-    is no ambiguity, the surrounding brackets can be dropped.
-
-    A {e caret} is a path whose last index brackets can be prefixed or
-    suffixed by an insertion point, represented by the character
-    ['v'].  This respectively denote the void before or after the
-    JSON construct found by the path.
-
-      {b Note.} FIXME
-      {ul
-      {- The syntax has no form of quoting at the moment this
-         means key names can't contain, [\[], [\]], or start with a number.}
-      {- For paths we should consider reusing a subset of the JSONPath syntax}} *)
-end
+(** [delete_path p] {{!delete_index}deletes} the last index of [p]. If
+    [p] is {!Path.root} this is {!Json.val-null}. *)
 
 (** {1:fmt Formatting} *)
 
@@ -1505,8 +1629,6 @@ val default_number_format : number_format
 (** [default_number_format] is ["%.17g"]. This number formats ensures
     that finite floating point values can be interchanged without loss
     of precision. *)
-
-(** {2:pp Pretty-printing} *)
 
 val pp_null : unit fmt
 (** [pp_null] formats a JSON null. *)
@@ -1537,14 +1659,15 @@ val pp_json' : ?number_format:number_format -> unit -> json fmt
     {- [number_format] is used to format JSON numbers. Defaults to
        {!default_number_format}}
     {- Non-finite numbers are output as JSON nulls
-       ({{!page-cookbook.numbers_as_nulls}explanation}).}
+       ({{!page-cookbook.non_finite_numbers}explanation}).}
     {- Strings are assumed to be valid UTF-8.}} *)
 
 val pp_value : ?number_format:number_format -> 'a t -> unit -> 'a fmt
 (** [pp_value t ()] formats the JSON representation of values as
-    described by [t] by encoding it with {!Json.encode} and formatting
+    described by [t] by encoding it with {!Json.val-encode} and formatting
     it with {!pp_json'}. If the encoding of the value errors a JSON
-    string with the error message is output. *)
+    string with the error message is formatted. This means that {!pp_value}
+    should always format valid JSON text. *)
 
 (** {1:low Low-level representation} *)
 
@@ -1553,7 +1676,7 @@ val pp_value : ?number_format:number_format -> 'a t -> unit -> 'a fmt
     This representation may change even between minor versions of the
     library. It can be used to devise new processors on JSON types.
 
-    Processors should be ready to catch the {!Json.Error} exception
+    Processors should be ready to catch the {!Jsont.exception-Error} exception
     when they invoke functional members of the representation.
 
     Processors should make sure they interpret mappings
@@ -1563,8 +1686,8 @@ val pp_value : ?number_format:number_format -> 'a t -> unit -> 'a fmt
 
     See the source of {!Json.decode'} and {!Json.encode'}
     for a simple example on how to process this representation. The
-    {{:https://github.com/dbuenzli/jsont/tree/master/paper}paper}
-    in the project repository may also help to understand this menagerie
+    {{:https://erratique.ch/repos/jsont/tree/paper}paper}
+    in the Jsont source repository may also help to understand this menagerie
     of types. *)
 module Repr : sig
   type 'a t' := 'a t
@@ -1652,10 +1775,7 @@ module Repr : sig
     (** [enc_meta] recovers the metadata of an array (if any). *) }
   (** The type for mapping JSON arrays to values of type ['array]
       with array elements mapped to type ['elt] and using a ['builder]
-      value to construct the array. The context values given to any of the
-      function should always be the context of the array; an index should
-      be {{!Context.push_nth}pushed} on this context when using [elt] to
-      process a given array element. *)
+      value to construct the array. *)
 
   (** {1:object_map Object maps} *)
 
@@ -1700,7 +1820,13 @@ module Repr : sig
     (** The value to use if absent (if any). *)
     enc : 'o -> 'a;
     (** [enc] recovers the value to encode from ['o]. *)
-    enc_meta : 'a -> Meta.t; (* FIXME *)
+    (*    enc_name_meta : 'a -> Meta.t;
+          XXX This should have been the meta found for the name, but
+          that does not fit so well in the member combinators, it's
+          not impossible to fit it in but likely increases the cost
+          for decoding objects. The layout preserving updates occur
+          via generic JSON which uses [mems_map] in which the meta
+          is available in [dec_add]. Let's leave it that way for now. *)
     enc_omit : 'a -> bool;
     (** [enc_omit] is [true] if the result of [enc] should
         not be encoded. *)
@@ -1744,8 +1870,9 @@ module Repr : sig
     dec_add : Meta.t -> string -> 'a -> 'builder -> 'builder;
     (** [dec_add] adds a member named [n] with metadata [meta] and
         value parsed by [mems_type] to the builder. *)
-    dec_finish : 'builder -> 'mems;
-    (** [dec_finish] turns the builder into an unknown member map. *)
+    dec_finish : Meta.t -> 'builder -> 'mems;
+    (** [dec_finish] turns the builder into an unknown member map.
+        The [meta] is the meta data of the object in which they were found. *)
     enc :
       'acc. (Meta.t -> string -> 'a -> 'acc -> 'acc) -> 'mems -> 'acc -> 'acc;
     (** [enc] folds over the member map for encoding. *)
@@ -1851,59 +1978,65 @@ module Repr : sig
 
   val unsafe_to_t : 'a t -> 'a t'
   (** [unsafe_to_t r] converts the representation to a type [r].  It
-      is unsafe because constructors of JSON types do maintain some
-      invariants. *)
+      is unsafe because constructors of the {!Jsont} module do
+      maintain some invariants. *)
 
-  (** {1:errors Errors and messages} *)
+  (** {1:kinds Kinds and doc} *)
 
-  val value_kind : 'a t -> string
-  (** [value_kind m] is the kind of definition of [m]. *)
+  val kinded_sort : 'a t -> string
+  (** [kinded_sort t] is kinded sort of [t], see {!Jsont.kinded_sort}. *)
 
-  val sort_kind' : kind:string -> sort:string -> string
-  val sort_kind : kind:string -> sort:Sort.t -> string
+  val array_map_kinded_sort : ('a, 'elt, 'builder) array_map  -> string
+  (** [array_map_kinded_sort map] is like {!kinded_sort} but
+      acts directly on the array [map]. *)
 
-  val array_kind : kind:string -> 'a t -> string
-  (** [array_kind ~kind elt] is an array of kind [kind] for
-      an array with element of type [elt]. *)
+  val object_map_kinded_sort : ('o, 'dec) object_map  -> string
+  (** [object_map_kind map] is like {!kinded_sort} but acts directly
+      on the object [map]. *)
 
-  val object_map_value_kind : ('o, 'dec) object_map  -> string
-  (** [object_map_kind m] is the kind of definition of [m]. *)
+  val pp_kind : string fmt
+  (** [pp_kind] formats kinds. *)
+
+  val doc : 'a t -> string
+  (** See {!Jsont.doc}. *)
+
+  (** {1:errors Errors} *)
+
+  val error_push_array :
+    Meta.t -> ('array, 'elt, 'builder) array_map -> int node -> Error.t -> 'a
+  (** [error_push_array] is like {!Error.push_array} but uses the
+      given array [meta] and array map to caracterize the context.  *)
+
+  val error_push_object :
+    Meta.t -> ('o, 'dec) object_map -> string node -> Error.t -> 'a
+  (** [error_push_object] is like {!Error.push_object} but uses the
+      given object [meta] and object map to caracterize the context. *)
 
   val type_error : Meta.t -> 'a t -> fnd:Sort.t -> 'b
-  (** [error_kind p m ~exp ~fnd] errors when kind [exp] was expected
-      but sort [fnd] was found. See also {!Jsont.Repr.type_error}. *)
-
-  (** [type_error ctx m t] is like {!Error.kind} but [exp] is derived
-      from [t]. *)
+  (** [type_error meta ~exp ~fnd] errors when kind [exp] was expected
+      but sort [fnd] was found. *)
 
   val missing_mems_error :
     Meta.t -> ('o, 'o) object_map -> exp:mem_dec String_map.t ->
     fnd:string list -> 'a
-  (** [missing_mems_error] is like {!Error.missing_mems} but with
-      information derived from the given argument map descriptions. In
-      [exp] only those member map which do not have a default value
-      are reported. *)
+  (** [missing_mems_error m map exp fnd] errors when [exp] cannot
+      be found, [fnd] can list a few members that were found. *)
 
   val unexpected_mems_error :
     Meta.t -> ('o, 'o) object_map -> fnd:(string * Meta.t) list -> 'a
+  (** [unexpected_mems_error meta map ~fnd] errors when [fnd] are
+      unexpected members for object [map]. *)
 
   val unexpected_case_tag_error :
     Meta.t -> ('o, 'o) object_map -> ('o, 'd, 'tag) object_cases ->
     'tag -> 'a
+  (** [unexpected_case_tag_error meta map cases tag] is when a [tag]
+      of a case member has no corresponding case. *)
 
-  (** {1:context Context}
+  (** {1:toolbox Processor toolbox} *)
 
-      Prefer these functions to those of {!Context} we might
-      extract information from the given object to enrich the context
-      at some point. *)
-
-  val error_push_object :
-    Meta.t -> ('o, 'dec) object_map -> string node -> Error.t -> 'a
-
-  val error_push_array :
-    Meta.t -> ('array, 'elt, 'builder) array_map -> int node -> Error.t -> 'a
-
-  (** {1:tool Toolbox} *)
+  val object_meta_arg : Meta.t Type.Id.t
+  (** [object_meta_arg] holds the {!Jsont.Object.mem} to *)
 
   (** Heterogeneous dictionaries. *)
   module Dict : sig
@@ -1917,20 +2050,31 @@ module Repr : sig
   end
 
   val apply_dict : ('ret, 'f) dec_fun -> Dict.t -> 'f
-
-  val object_meta_arg : Meta.t Type.Id.t
-  val pp_code : string fmt
-  val pp_kind : string fmt
+  (** [apply_dict dec dict] applies [dict] to [f] in order to get the
+      value ['f]. Raises [Invalid_argument] if [dict] has not all the
+      type identifiers that [dec] needs. *)
 
   type unknown_mems_option =
   | Unknown_mems :
       ('o, 'mems, 'builder) unknown_mems option -> unknown_mems_option
+  (** A type for hiding an optional {!type-unknown_mems} values. *)
 
   val override_unknown_mems :
     by:unknown_mems_option -> unknown_mems_option ->
     Dict.t -> unknown_mems_option * Dict.t
+  (** [override_unknown_mems ~by current dict] preforms the unknown member
+      overriding logic for {!Jsont.Object.Case} objects. In particular if
+      [current] is a {!Jsont.Object.Mems.val-map} it adds an empty one in [dict]
+      so that the associated decoding function does not fail. *)
 
   val finish_object_decode :
     ('o, 'o) object_map -> Meta.t -> ('p, 'mems, 'builder) unknown_mems ->
     'builder -> mem_dec String_map.t -> Dict.t -> Dict.t
+  (** [finish_object_decode map meta unknown_mems umap rem_mems dict] finishes
+      an object map [map] decode. It adds the [umap] (if needed) to [dict],
+      it adds [meta] to [dict] under {!object_meta_arg} and tries to find
+      andd default values to [dict] for [rem_mems] (and errors if it can't). *)
+
+  val pp_code : string fmt
+  (** [pp_code] formats strings like code (in bold). *)
 end

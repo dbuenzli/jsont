@@ -111,6 +111,67 @@ module Type = struct (* Can be removed once we require OCaml 5.1 *)
   end
 end
 
+(* Resizable arrays *)
+
+module Rarray = struct
+  type 'a t =
+    { mutable els : 'a array;
+      mutable max : int; (* index of last element of [els]. *) }
+
+  let get a i = a.els.(i)
+  let empty () = { els = [||]; max = -1 }
+  let grow a v =
+    let len = a.max + 1 in
+    let nlen = if len = 0 then 256 else len in
+    let els' = Array.make (2 * nlen) v in
+    Array.blit a.els 0 els' 0 len; a.els <- els'
+
+  let length a = a.max + 1
+  let add_last v a =
+    let max = a.max + 1 in
+    if max = Array.length a.els then grow a v;
+    a.max <- max; a.els.(max) <- v; a
+
+  let to_array a =
+    if a.max + 1 = Array.length a.els then a.els else
+    let v = Array.make (a.max + 1) a.els.(0) in
+    Array.blit a.els 0 v 0 (a.max + 1);
+    v
+end
+
+(* Resizable bigarrays *)
+
+module Rbigarray1 = struct
+  type ('a, 'b, 'c) t =
+    { mutable els : ('a, 'b, 'c) Bigarray.Array1.t;
+      mutable max : int; (* index of the last element of [els]. *)  }
+
+  let get a i = Bigarray.Array1.get a.els i
+
+  let empty kind layout =
+    { els = Bigarray.Array1.create kind layout 0; max = -1 }
+
+  let grow a v =
+    let len = a.max + 1 in
+    let len = if len = 0 then 256 else len in
+    let init i = Bigarray.Array1.(if i <= a.max then get a.els i else v) in
+    let k, l = Bigarray.Array1.(kind a.els, layout a.els) in
+    let els' = Bigarray.Array1.init k l (2 * len) init in
+    a.els <- els'
+
+  let length a = a.max + 1
+  let add_last v a =
+    let max = a.max + 1 in
+    if max = Bigarray.Array1.dim a.els then grow a v;
+    a.max <- max; Bigarray.Array1.set a.els max v; a
+
+  let to_bigarray a =
+    if a.max + 1 = Bigarray.Array1.dim a.els then a.els else
+    let init i = Bigarray.Array1.get a.els i in
+    let k, l = Bigarray.Array1.(kind a.els, layout a.els) in
+    Bigarray.Array1.init k l (a.max + 1) init
+end
+
 (* Mini fmt *)
 
 module Fmt = struct
@@ -127,6 +188,9 @@ module Fmt = struct
     if first = 0 && len = String.length s then string ppf s else
     (* One day use https://github.com/ocaml/ocaml/pull/12133 *)
     for i = first to first + len - 1 do char ppf s.[i] done
+
+  let lines ppf s =
+    Format.pp_print_list string ppf (String.split_on_char '\n' s)
 
   (* ANSI styling
 
@@ -157,6 +221,8 @@ module Fmt = struct
   let code = bold
   let puterr ppf () = bold_red ppf "Error"; char ppf ':'
 
+  let disable_ansi_styler () = set_styler Plain
+
   (* HCI fragments *)
 
   let op_enum op ?(empty = nop) pp_v ppf = function
@@ -171,8 +237,6 @@ module Fmt = struct
       loop ppf vs
 
   let or_enum ?empty pp_v ppf vs = op_enum "or" ?empty pp_v ppf vs
-  let did_you_mean pp_v ppf = function
-  | [] -> () | vs -> pf ppf "Did you mean %a ?" (or_enum pp_v) vs
 
   let should_it_be pp_v ppf = function
   | [] -> () | vs -> pf ppf "Should it be %a ?" (or_enum pp_v) vs
@@ -200,7 +264,6 @@ module Fmt = struct
 
   let should_it_be_mem ppf (exp, fnd) = match suggest fnd exp with
   | [] -> () | ms ->  pf ppf "@;@[%a@]" (should_it_be code) ms
-
 
   (* JSON formatting *)
 
@@ -319,6 +382,7 @@ module Textloc = struct
 
   let to_last l =
     make l.file l.last_byte l.last_byte l.last_line l.last_line
+
   let before l =
     make l.file l.first_byte byte_pos_none l.first_line line_pos_none
 
@@ -385,6 +449,8 @@ module Textloc = struct
       (snd l.first_line) (snd l.last_line)
 end
 
+type 'a fmt = Stdlib.Format.formatter -> 'a -> unit
+
 (* Node meta data *)
 
 module Meta = struct
@@ -403,68 +469,12 @@ module Meta = struct
   let ws_after m = m.ws_after
   let with_textloc m textloc = { m with textloc }
   let clear_ws m = { m with ws_before = ""; ws_after = "" }
+  let clear_textloc m = { m with textloc = Textloc.none }
+  let copy_ws src ~dst =
+    { dst with ws_before = src.ws_before; ws_after = src.ws_after }
 end
 
-(* Resizable arrays *)
-
-module Rarray = struct
-  type 'a t =
-    { mutable els : 'a array;
-      mutable max : int; (* index of last element of [els]. *) }
-
-  let get a i = a.els.(i)
-  let empty () = { els = [||]; max = -1 }
-  let grow a v =
-    let len = a.max + 1 in
-    let nlen = if len = 0 then 256 else len in
-    let els' = Array.make (2 * nlen) v in
-    Array.blit a.els 0 els' 0 len; a.els <- els'
-
-  let length a = a.max + 1
-  let add_last v a =
-    let max = a.max + 1 in
-    if max = Array.length a.els then grow a v;
-    a.max <- max; a.els.(max) <- v; a
-
-  let to_array a =
-    if a.max + 1 = Array.length a.els then a.els else
-    let v = Array.make (a.max + 1) a.els.(0) in
-    Array.blit a.els 0 v 0 (a.max + 1);
-    v
-end
-
-(* Resizable bigarrays *)
-
-module Rbigarray1 = struct
-  type ('a, 'b, 'c) t =
-    { mutable els : ('a, 'b, 'c) Bigarray.Array1.t;
-      mutable max : int; (* index of the last element of [els]. *)  }
-
-  let get a i = Bigarray.Array1.get a.els i
-
-  let empty kind layout =
-    { els = Bigarray.Array1.create kind layout 0; max = -1 }
-
-  let grow a v =
-    let len = a.max + 1 in
-    let len = if len = 0 then 256 else len in
-    let init i = Bigarray.Array1.(if i <= a.max then get a.els i else v) in
-    let k, l = Bigarray.Array1.(kind a.els, layout a.els) in
-    let els' = Bigarray.Array1.init k l (2 * len) init in
-    a.els <- els'
-
-  let length a = a.max + 1
-  let add_last v a =
-    let max = a.max + 1 in
-    if max = Bigarray.Array1.dim a.els then grow a v;
-    a.max <- max; Bigarray.Array1.set a.els max v; a
-
-  let to_bigarray a =
-    if a.max + 1 = Bigarray.Array1.dim a.els then a.els else
-    let init i = Bigarray.Array1.get a.els i in
-    let k, l = Bigarray.Array1.(kind a.els, layout a.els) in
-    Bigarray.Array1.init k l (a.max + 1) init
-end
+type 'a node = 'a * Meta.t
 
 (* JSON numbers *)
 
@@ -526,4 +536,151 @@ module Number = struct
 
   let[@inline] in_exact_int64_range v =
     min_exact_int64_float <= v && v <= max_exact_int64_float
+end
+
+(* JSON Paths *)
+
+module Path = struct
+
+  (* Indices *)
+
+  type index = Mem of string node | Nth of int node
+
+  let pp_name ppf n = Fmt.code ppf n
+  let pp_index_num ppf n = Fmt.code ppf (Int.to_string n)
+
+  let pp_index ppf = function
+  | Mem (n, _) -> pp_name ppf n
+  | Nth (n, _) -> Fmt.pf ppf "[%a]" pp_index_num n
+
+  let pp_index_trace ppf = function
+  | Mem (n, meta) ->
+      Fmt.pf ppf "%a: in member %a" Textloc.pp (Meta.textloc meta) pp_name n
+  | Nth (n, meta) ->
+      Fmt.pf ppf "%a: at index %a" Textloc.pp (Meta.textloc meta) pp_index_num n
+
+  let pp_bracketed_index ppf = function
+  | Mem (n, _) -> Fmt.pf ppf "[%a]" pp_name n
+  | Nth (n, _) -> Fmt.pf ppf "[%a]" pp_index_num n
+
+  (* Paths *)
+
+  type t = index list
+  let root = []
+  let is_root = function [] -> true | _ -> false
+  let nth ?(meta = Meta.none) n p = Nth (n, meta) :: p
+  let mem ?(meta = Meta.none) n p = Mem (n, meta) :: p
+  let rev_indices p = p
+  let pp ppf is =
+    let pp_sep ppf () = Fmt.char ppf '.' in
+    Fmt.list ~pp_sep pp_index ppf (List.rev is)
+
+  let pp_trace ppf is =
+    if is <> [] then Fmt.pf ppf "@,@[<v>%a@]" (Fmt.list pp_index_trace) is
+
+  let none = []
+  let err i fmt = Format.kasprintf failwith ("%d: " ^^ fmt) i
+  let err_unexp_eoi i = err i "Unexpected end of input"
+  let err_unexp_char i s = err i "Unexpected character: %C" s.[i]
+  let err_illegal_char i s = err i "Illegal character here: %C" s.[i]
+  let err_unexp i s = err i "Unexpected input: %S" (string_subrange ~first:i s)
+
+  (* Parsing *)
+
+  let parse_eoi s i max = if i > max then () else err_unexp i s
+  let parse_index p s i max =
+    let first, stop = match s.[i] with '[' -> i + 1, ']' | _ -> i, '.' in
+    let last, next =
+      let rec loop stop s i max = match i > max with
+      | true -> if stop = ']' then err_unexp_eoi i else (i - 1), i
+      | false ->
+          let illegal = s.[i] = '[' || (s.[i] = ']' && stop = '.') in
+          if illegal then err_illegal_char i s else
+          if s.[i] <> stop then loop stop s (i + 1) max else
+          (i - 1), if stop = ']' then i + 1 else i
+      in
+      loop stop s first max
+    in
+    let idx = string_subrange ~first ~last s in
+    if idx = "" then err first "illegal empty index" else
+    match int_of_string idx with
+    | exception Failure _ -> next, (Mem (idx, Meta.none)) :: p
+    | idx -> next, (Nth (idx, Meta.none)) :: p
+
+  let of_string s =
+    let rec loop p s i max =
+      if i > max then p else
+      let next, p = parse_index p s i max in
+      if next > max then p else
+      if s.[next] <> '.' then err_unexp_char next s else
+      if next + 1 <= max then loop p s (next + 1) max else
+      err_unexp_eoi next
+    in
+    try
+      if s = "" then Ok [] else
+      let start = if s.[0] = '.' then 1 else 0 in
+      Ok (loop [] s start (String.length s - 1))
+    with Failure e -> Error e
+
+  (* Carets *)
+
+  module Caret = struct
+    type path = t
+    type pos = Before | Over | After
+    type t = pos * path
+    let pp ppf = function
+    | Over, p -> pp ppf p
+    | Before, (c :: p)->
+        pp ppf p;
+        (if p <> [] then Fmt.char ppf '.');
+        Fmt.char ppf 'v'; pp_bracketed_index ppf c
+    | After, (c :: p) ->
+        pp ppf p;
+        (if p <> [] then Fmt.char ppf '.');
+        pp_bracketed_index ppf c; Fmt.char ppf 'v'
+    | _ -> ()
+
+    (* Parsing *)
+
+    let of_string s =
+      let rec loop p s i max =
+        if i > max then Over, p else
+        let next = i + 1 in
+        match s.[i] with
+        | 'v' when next <= max && s.[next] = '[' ->
+            let next, p = parse_index p s next max in
+            parse_eoi s next max; Before, p
+        | c ->
+            let next, p = parse_index p s i max in
+            if next > max then Over, p else
+            if s.[next] = 'v'
+            then (parse_eoi s (next + 1) max; After, p) else
+            if s.[next] <> '.' then err_unexp_char next s else
+            if next + 1 <= max then loop p s (next + 1) max else
+            err_unexp_eoi next
+      in
+      try
+        if s = "" then Ok (Over, []) else
+        let start = if s.[0] = '.' then 1 else 0 in
+        Ok (loop [] s start (String.length s - 1))
+      with Failure e -> Error e
+  end
+
+  let over p = Caret.Over, p
+  let after p = Caret.After, p
+  let before p = Caret.Before, p
+end
+
+(* JSON sorts *)
+
+module Sort = struct
+  type t = Null | Bool | Number | String | Array | Object
+  let to_string = function
+  | Null -> "null" | Bool -> "bool" | Number -> "number"
+  | String  -> "string" | Array  -> "array" | Object -> "object"
+
+  let kinded' ~kind:k s = if k = "" then s else String.concat " " [k; s]
+  let kinded ~kind  sort = kinded' ~kind (to_string sort)
+  let or_kind ~kind sort = if kind <> "" then kind else (to_string sort)
+  let pp ppf s = Fmt.code ppf (to_string s)
 end

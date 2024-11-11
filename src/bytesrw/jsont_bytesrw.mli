@@ -23,29 +23,28 @@ val decode :
   Bytes.Reader.t -> ('a, string) result
 (** [decode t r] decodes a value from [r] according to [t].
     {ul
-    {- If [layout] is [true] whitespace is preserved in Jsonit.Json.Meta.t
+    {- If [layout] is [true] whitespace is preserved in {!Jsont.Meta.t}
        values. Defaults to [false].}
-    {- If [locs] is [true] locations are preserved in Jsonit.Json.Meta.t
+    {- If [locs] is [true] locations are preserved in {!Jsont.Meta.t}
        values and error messages are precisely located. Defaults to [false].}
-    {- [file] is the file path from which [r] is assumed to read
-       (defaults to {!Jsont.Textloc.file_none}) used in the
-       text locations if [locs] is [true].}} *)
+    {- [file] is the file path from which [r] is assumed to read.
+       Defaults to {!Jsont.Textloc.file_none}}} *)
 
 val decode' :
   ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
   Bytes.Reader.t -> ('a, Jsont.Error.t) result
-(** [decode'] is like {!val-decode} but preserves the
-    error structure. *)
+(** [decode'] is like {!val-decode} but preserves the error structure. *)
 
 val decode_string :
   ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
   string -> ('a, string) result
-(** [decode_string] is like {!decode'} but decodes directly from a string. *)
+(** [decode_string] is like {!val-decode} but decodes directly from a string. *)
 
 val decode_string' :
   ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> 'a Jsont.t ->
   string -> ('a, Jsont.Error.t) result
-(** [decode_string'] is like {!decode'} but decodes directly from a string. *)
+(** [decode_string'] is like {!val-decode'} but decodes directly from a
+    string. *)
 
 (** {1:encode Encode} *)
 
@@ -55,11 +54,11 @@ val encode :
 (** [encode t v w] encodes value [v] according to [t] on [w].
     {ul
     {- If [buf] is specified it is used as a buffer for the slices written
-       on [w]. Defaults to {!Bytes.Slice.io_buffer_size}.}
-    {- [format] specifies how the JSON should be formatted,
-       defaults to {!Jsont.Json.Minify}.}
+       on [w]. Defaults to a buffer of length {!Bytes.Slice.io_buffer_size}.}
+    {- [format] specifies how the JSON should be formatted.
+       Defaults to {!Jsont.Minify}.}
     {- [number_format] specifies the format string to format numbers. Defaults
-       to {!Jsont.default_number_string}.}
+       to {!Jsont.default_number_format}.}
     {- [eod] indicates whether {!Bytesrw.Bytes.Slice.eod} should
        be written on [w].}} *)
 
@@ -80,15 +79,15 @@ val encode_string' :
 
 (** {1:recode Recode}
 
-    The defaults in these functions are those of {!decode} and
-    {!encode}, except if [layout] is [true], [format] defaults to
+    The defaults in these functions are those of {!val-decode} and
+    {!val-encode}, except if [layout] is [true], [format] defaults to
     [Jsont.Layout] and vice-versa.  *)
 
 val recode :
   ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t ->
   ?format:Jsont.format -> ?number_format:Jsont.number_format -> 'a Jsont.t ->
   Bytes.Reader.t -> Bytes.Writer.t -> eod:bool -> (unit, string) result
-(** [recode] is {!decode} followed by {!recode}.  *)
+(** [recode] is {!val-decode} followed by {!val-recode}.  *)
 
 val recode' :
   ?layout:bool -> ?locs:bool -> ?file:Jsont.Textloc.fpath -> ?buf:Bytes.t ->
@@ -114,8 +113,8 @@ val recode_string' :
     In order to simplify the implementation not all layout is preserved.
     In particular:
     {ul
-    {- White space in empty arrays and objects is dropped}
-    {- Unicode escapes are replaced by their UTF-8 encoding}
+    {- White space in empty arrays and objects is dropped.}
+    {- Unicode escapes are replaced by their UTF-8 encoding.}
     {- The format of numbers is not preserved.}} *)
 
 (** {1:duplicate Duplicate object members}
@@ -126,4 +125,4 @@ val recode_string' :
     [JSON.parse]} and the last one takes over, however duplicate
     members all have to parse with the specified type as we error as soon
     as possible. Also
-    {{!Jsont.Obj.case_mem}case members} are not allowed to duplicate. *)
+    {{!Jsont.Object.case_mem}case members} are not allowed to duplicate. *)

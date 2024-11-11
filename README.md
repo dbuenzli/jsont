@@ -44,17 +44,22 @@ issue tracker.
 
 ## Examples
 
-A few examples can be found in documentation and the [test](test/)
-directory. The [`test/topojson.ml`] shows use of the library on a
-concrete JSON data format.
-
-If you want to understand the techniques behind the library the
-[`paper/soup.ml`] source implements the abridged version of the
-underlying data type used in [the paper].
+A few examples can be found in the [documentation][online] and in the
+[test](test/) directory. The [`test/topojson.ml`] and
+[`test/geojson.ml`] show use of the library on concrete JSON data
+formats.
 
 [`test/topojson.ml`]: test/topojson.ml
-[`paper/soup.ml`]: test/soup.ml
+[`test/geojson.ml`]: test/geojson.ml
+
+## Paper & technique
+
+If you want to understand the *finally tagged* technique used by the
+library, the [`paper/soup.ml`] source implements the abridged version
+of the underlying data type used in [the paper].
+
 [the paper]: paper/
+[`paper/soup.ml`]: paper/soup.ml
 
 ## Acknowledgments 
 

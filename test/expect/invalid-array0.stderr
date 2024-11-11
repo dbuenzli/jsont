@@ -1,4 +1,4 @@
 jsont: [01;31mError[m: Expected [1mJSON value[0m but found [1m,[0m
-              File "invalid-array0.json", line 1, characters 7-8
+              File "invalid-array0.json", line 1, characters 7-8:
               File "invalid-array0.json", line 1, characters 7-8: at index [1m2[0m of
-              File "-": array [1marray<json>[0m
+              File "invalid-array0.json", line 1, characters 2-8: [1marray<json>[0m

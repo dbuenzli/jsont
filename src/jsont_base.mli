@@ -3,10 +3,9 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-(** Low-level internal tools. *)
+(** Low-level internal tools for {!Jsont}. *)
 
 val string_subrange : ?first:int -> ?last:int -> string -> string
-
 val binary_string_of_hex : string -> (string, string) result
 val binary_string_to_hex : string -> string
 
@@ -21,11 +20,34 @@ module Type : sig
   end
 end
 
+(** Resizable arrays. *)
+module Rarray :  sig
+  type 'a t
+  val get : 'a t -> int -> 'a
+  val empty : unit -> 'a t
+  val grow : 'a t -> 'a -> unit
+  val length : 'a t -> int
+  val add_last : 'a -> 'a t -> 'a t
+  val to_array : 'a t -> 'a array
+end
+
+(** Resizable bigarrays. *)
+module Rbigarray1 : sig
+  type ('a, 'b, 'c) t
+  val get : ('a, 'b, 'c) t -> int -> 'a
+  val empty : ('a, 'b) Bigarray.kind -> 'c Bigarray.layout -> ('a, 'b, 'c) t
+  val grow : ('a, 'b, 'c) t -> 'a -> unit
+  val length : ('a, 'b, 'c) t -> int
+  val add_last : 'a -> ('a, 'b, 'c) t -> ('a, 'b, 'c) t
+  val to_bigarray : ('a, 'b, 'c) t -> ('a, 'b, 'c) Bigarray.Array1.t
+end
+
 (** Mini fmt *)
 module Fmt : sig
   type 'a t = Format.formatter -> 'a -> unit
   val pf : Format.formatter -> ('a, Format.formatter, unit) format -> 'a
   val str : ('a, Format.formatter, unit, string) format4 -> 'a
+  val disable_ansi_styler : unit -> unit
 
   val nop : unit t
   val sp : unit t
@@ -33,6 +55,7 @@ module Fmt : sig
   val char : char t
   val string : string t
   val substring : int -> int -> string t
+  val lines : string t
   val bold : string t
   val bold_red : string t
   val code : string t
@@ -40,6 +63,7 @@ module Fmt : sig
   val out_of_dom : ?pp_kind:unit t -> unit -> (string * string list) t
   val should_it_be_mem : (string * string list) t
   val similar_mems : (string * string list) t
+
 
   type json_number_format = (float -> unit, Format.formatter, unit) format
   val json_null : unit t
@@ -50,9 +74,7 @@ module Fmt : sig
   val json_string : string t
 end
 
-(** Text locations.
-
-   See {!Jsont.Textloc} for documentation. *)
+(** See {!Jsont.Textloc} *)
 module Textloc : sig
   type fpath = string
   val file_none : fpath
@@ -96,9 +118,9 @@ module Textloc : sig
   val pp_dump : Format.formatter -> t -> unit
 end
 
-(** Node metadata.
+type 'a fmt = Stdlib.Format.formatter -> 'a -> unit
 
-   See {!Jsont.Meta} for documentation. *)
+(** See {!Jsont.Meta} *)
 module Meta : sig
   type t
   val make : ?ws_before:string -> ?ws_after:string -> Textloc.t -> t
@@ -109,29 +131,11 @@ module Meta : sig
   val ws_after : t -> string
   val with_textloc : t -> Textloc.t -> t
   val clear_ws : t -> t
+  val clear_textloc : t -> t
+  val copy_ws : t -> dst:t -> t
 end
 
-(** Resizable arrays. *)
-module Rarray :  sig
-  type 'a t
-  val get : 'a t -> int -> 'a
-  val empty : unit -> 'a t
-  val grow : 'a t -> 'a -> unit
-  val length : 'a t -> int
-  val add_last : 'a -> 'a t -> 'a t
-  val to_array : 'a t -> 'a array
-end
-
-(** Resizable bigarrays. *)
-module Rbigarray1 : sig
-  type ('a, 'b, 'c) t
-  val get : ('a, 'b, 'c) t -> int -> 'a
-  val empty : ('a, 'b) Bigarray.kind -> 'c Bigarray.layout -> ('a, 'b, 'c) t
-  val grow : ('a, 'b, 'c) t -> 'a -> unit
-  val length : ('a, 'b, 'c) t -> int
-  val add_last : 'a -> ('a, 'b, 'c) t -> ('a, 'b, 'c) t
-  val to_bigarray : ('a, 'b, 'c) t -> ('a, 'b, 'c) Bigarray.Array1.t
-end
+type 'a node = 'a * Meta.t
 
 (** JSON number tools. *)
 module Number : sig
@@ -149,4 +153,47 @@ module Number : sig
   val in_exact_int16_range : float -> bool
   val in_exact_int32_range : float -> bool
   val in_exact_int64_range : float -> bool
+end
+
+(** See {!Jsont.Path} *)
+module Path : sig
+  type index =
+  | Mem of string node
+  | Nth of int node
+
+  val pp_index : index fmt
+  val pp_index_trace : index fmt
+
+  type t
+  val root : t
+  val is_root : t -> bool
+  val nth : ?meta:Meta.t -> int -> t -> t
+  val mem : ?meta:Meta.t -> string -> t -> t
+  val rev_indices : t -> index list
+  val of_string : string -> (t, string) result
+  val pp : t fmt
+  val pp_trace : t fmt
+
+  module Caret : sig
+    type path := t
+    type pos = Before | Over | After
+    type t = pos * path
+    val of_string : string -> (t, string) result
+    val pp : t fmt
+  end
+
+  val over : t -> Caret.t
+  val before : t -> Caret.t
+  val after : t -> Caret.t
+end
+
+(** See {!Jsont.Sort} *)
+module Sort : sig
+  type t = Null | Bool | Number | String | Array | Object
+  val to_string : t -> string
+
+  val kinded' : kind:string -> string -> string
+  val kinded : kind:string -> t -> string
+  val or_kind : kind:string -> t -> string
+  val pp : Format.formatter -> t -> unit
 end

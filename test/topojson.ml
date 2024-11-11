@@ -9,17 +9,17 @@ module String_map = Map.Make (String)
 
 module Position = struct
   type t = float array
-  let jsont = Jsont.(array ~doc:"Position" number)
+  let jsont = Jsont.(array ~kind:"Position" number)
 end
 
 module Bbox = struct
   type t = float array
-  let jsont = Jsont.(array ~doc:"Bbox" number)
+  let jsont = Jsont.(array ~kind:"Bbox" number)
 end
 
 module Arcs = struct
   type t = Position.t array array
-  let jsont = Jsont.(array ~doc:"Arcs" (array Position.jsont))
+  let jsont = Jsont.(array ~kind:"Arcs" (array Position.jsont))
 end
 
 module Transform = struct
@@ -58,8 +58,8 @@ module Multi_point = struct
   let coordinates v = v.coordinates
   let jsont =
     Jsont.Object.map ~kind:"MultiPoint" make
-    |> Jsont.Object.mem "coordinates"
-      (Jsont.list Position.jsont) ~enc:coordinates
+    |> Jsont.Object.mem "coordinates" (Jsont.list Position.jsont)
+      ~enc:coordinates
     |> Jsont.Object.finish
 end
 
@@ -104,9 +104,24 @@ module Multi_polygon = struct
 end
 
 module Geometry = struct
+  type id = [ `Number of float | `String of string ]
+  let id_jsont =
+    let number =
+      let dec = Jsont.Base.dec (fun n -> `Number n) in
+      let enc = Jsont.Base.enc (function `Number n -> n | _ -> assert false) in
+      Jsont.Base.number (Jsont.Base.map ~enc ~dec ())
+    in
+    let string =
+      let dec = Jsont.Base.dec (fun n -> `String n) in
+      let enc = Jsont.Base.enc (function `String n -> n | _ -> assert false) in
+      Jsont.Base.string (Jsont.Base.map ~enc ~dec ())
+    in
+    let enc = function `Number _ -> number | `String _ -> string in
+    Jsont.any ~kind:"id" ~dec_number:number ~dec_string:string ~enc ()
+
   type t =
     { type' : type';
-      id : string option;
+      id : id option;
       properties : Jsont.json String_map.t option;
       bbox : Bbox.t option;
       unknown : Jsont.json }
@@ -169,8 +184,8 @@ module Geometry = struct
     in
     Jsont.Object.map ~kind:"Geometry" make
     |> Jsont.Object.case_mem "type" Jsont.string ~enc:type' ~enc_case cases
-      ~tag_to_string:Fun.id
-    |> Jsont.Object.opt_mem "id" Jsont.string ~enc:id
+      ~tag_to_string:Fun.id ~tag_compare:String.compare
+    |> Jsont.Object.opt_mem "id" id_jsont ~enc:id
     |> Jsont.Object.opt_mem "properties" properties_type ~enc:properties
     |> Jsont.Object.opt_mem "bbox" Bbox.jsont ~enc:bbox
     |> Jsont.Object.keep_unknown Jsont.json_mems ~enc:unknown
@@ -179,7 +194,7 @@ module Geometry = struct
 
   let jsont = Lazy.force jsont
   type objects = t String_map.t
-  let objects_jsont = Jsont.Object.as_string_map ~kind:"objects" jsont
+  let objects_jsont = Jsont.Object.as_string_map ~kind:"objects map" jsont
 end
 
 module Topology = struct
@@ -215,8 +230,13 @@ end
 let ( let* ) = Result.bind
 let strf = Printf.sprintf
 
-let log_err fmt = Format.eprintf ("@[Error: " ^^ fmt ^^ "@]@.")
-let log_if_error ~use = function Error e -> log_err "%s" e; use | Ok v -> v
+let log_if_error ~use = function
+| Ok v -> v
+| Error e ->
+    let lines = String.split_on_char '\n' e in
+    Format.eprintf "@[%a @[<v>%a@]@]@."
+      Jsont.Error.puterr () (Format.pp_print_list Format.pp_print_string) lines;
+    use
 
 let with_infile file f = (* XXX add something to bytesrw. *)
   let process file ic = try Ok (f (Bytesrw.Bytes.Reader.of_in_channel ic)) with
@@ -246,7 +266,7 @@ let topojson =
     let doc = "$(docv) is the TopoJSON file. Use $(b,-) for stdin." in
     Arg.(value & pos 0 string "-" & info [] ~doc ~docv:"FILE")
   and+ locs =
-    let doc = "Preserve locations (for errors)." in
+    let doc = "Preserve locations (better errors)." in
     Arg.(value & flag & info ["l"; "locs"] ~doc)
   and+ format =
     let fmt = [ "indent", Jsont.Indent; "minify", Jsont.Minify ] in

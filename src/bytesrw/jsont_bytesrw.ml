@@ -73,47 +73,30 @@ let make_decoder ?(locs = false) ?(layout = false) ?(file = "-") reader =
 
 (* Decoder positions *)
 
-let[@inline] get_line_pos d =
-  if d.locs then d.line, d.line_start else Jsont.Textloc.line_pos_none
+let[@inline] get_line_pos d = d.line, d.line_start
 
 let get_last_byte d =
-  if not d.locs then 0 else
   if d.u <= 0x7F || d.u = eot then d.byte_count - 1 else
   if d.u = sot then 0 else
   (* On multi-bytes uchars we want to point on the first byte. *)
-  d.byte_count - Uchar.utf_8_byte_length (Uchar.of_int d.u) + 1
-
-let textloc_to_current ~first_byte ~first_line d =
-  if not d.locs then Jsont.Textloc.none else
-  let last_byte = get_last_byte d and last_line = get_line_pos d in
-  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
-
-let textloc_current d =
-  if not d.locs then Jsont.Textloc.none else
-  let first_byte = get_last_byte d and first_line = get_line_pos d in
-  let last_byte = first_byte and last_line = first_line in
-  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
-
-let textloc_prev_ascii_char ~first_byte ~first_line d =
-  (* N.B. when we call that the line doesn't move and the char was on
-     a single byte *)
-  if not d.locs then Jsont.Textloc.none else
-  let last_byte = get_last_byte d and last_line = get_line_pos d in
-  let last_byte = last_byte - 1 in
-  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
-
-let meta_make d ?ws_before ?ws_after textloc =
-  if not d.locs && not d.layout then Jsont.Meta.none else
-  Jsont.Meta.make ?ws_before ?ws_after textloc
+  d.byte_count - Uchar.utf_8_byte_length (Uchar.of_int d.u)
 
 (* Decoder errors *)
 
-let err_here d fmt =
-  Jsont.Error.msgf (Jsont.Meta.make (textloc_current d)) fmt
+let error_meta d =
+  let first_byte = get_last_byte d and first_line = get_line_pos d in
+  let last_byte = first_byte and last_line = first_line in
+  Jsont.Meta.make @@
+  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
 
+let error_meta_to_current ~first_byte ~first_line d =
+  let last_byte = get_last_byte d and last_line = get_line_pos d in
+  Jsont.Meta.make @@
+  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
+
+let err_here d fmt = Jsont.Error.msgf (error_meta d) fmt
 let err_to_here ~first_byte ~first_line d fmt =
-  let textloc = textloc_to_current ~first_byte ~first_line d  in
-  Jsont.Error.msgf (Jsont.Meta.make textloc) fmt
+  Jsont.Error.msgf (error_meta_to_current ~first_byte ~first_line d) fmt
 
 let err_malformed_utf_8 d =
   if d.i_next > d.i_max
@@ -121,11 +104,23 @@ let err_malformed_utf_8 d =
   else err_here d "UTF-8 decoding error: invalid byte %a"
       pp_code (Printf.sprintf "%x02x" (Bytes.get_uint8 d.i d.i_next))
 
-let err_exp_eot d =
-  err_here d "Expected %a but found %a" pp_quchar eot pp_quchar d.u
+let err_exp d = err_here d "Expected %a but found %a"
+let err_exp_while d = err_here d "Expected %a while parsing %a but found %a"
 
-let err_not_json_value d =
-  err_here d "Expected %a but found %a" pp_code "JSON value" pp_quchar d.u
+let err_exp_eot d = err_exp d pp_quchar eot pp_quchar d.u
+let err_not_json_value d = err_exp d pp_code "JSON value" pp_quchar d.u
+
+let current_json_sort d = match d.u with
+| 0x0066 (* f *) | 0x0074 (* t *) -> Jsont.Sort.Bool
+| 0x006E (* n *) -> Jsont.Sort.Null
+| 0x007B (* { *) -> Jsont.Sort.Object
+| 0x005B (* [ *) -> Jsont.Sort.Array
+| 0x0022 (* DQUOTE *) -> Jsont.Sort.String
+| u when is_number_start u -> Jsont.Sort.Number
+| _ -> err_not_json_value d
+
+let type_error d t =
+  Jsont.Repr.type_error (error_meta d) t ~fnd:(current_json_sort d)
 
 (* Errors for constants *)
 
@@ -140,18 +135,15 @@ let err_float_parse meta tok =
   Jsont.Error.msgf meta "Could not parse %S to a %a" tok pp_code "float"
 
 let err_exp_digit d =
-  err_here d "Expected %a while parsing %a but found %a"
-    pp_code "decimal digit" pp_code "number" pp_quchar d.u
+  err_exp_while d pp_code "decimal digit" pp_code "number" pp_quchar d.u
 
 (* Errors for strings *)
 
 let err_exp_hex_digit d =
-  err_here d "Expected %a while parsing %a but found %a"
-    pp_code "hex digit" pp_code "character escape" pp_quchar d.u
+  err_exp_while d pp_code "hex digit" pp_code "character escape" pp_quchar d.u
 
 let err_exp_lo_surrogate d u =
-  err_here d "Expected %a while parsing %a but found %a"
-    pp_code "low surrogate" pp_code "character escape" pp_quchar u
+  err_exp_while d pp_code "low surrogate" pp_code "character escape" pp_quchar u
 
 let err_unpaired_lo_surrogate d u =
   err_here d "Unpaired low surrogate %a in %a" pp_quchar u pp_code "string"
@@ -160,27 +152,23 @@ let err_unpaired_hi_surrogate d u =
   err_here d "Unpaired high surrogate %a in %a" pp_quchar u pp_code "string"
 
 let err_exp_esc ~first_byte ~first_line d u =
-  err_to_here ~first_byte ~first_line d
-    "Expected %a while parsing %a found %a"
+  err_to_here ~first_byte ~first_line d "Expected %a while parsing %a found %a"
     pp_code "escape character" pp_code "escape" pp_quchar u
 
 let err_unclosed_string ~first_byte ~first_line d =
   err_to_here ~first_byte ~first_line d "Unclosed %a" pp_code "string"
 
 let err_illegal_ctrl_char ~first_byte ~first_line d =
-  err_to_here ~first_byte ~first_line d
-    "Illegal control character %a in %a" pp_quchar d.u pp_code "string"
+  err_to_here ~first_byte ~first_line d "Illegal control character %a in %a"
+    pp_quchar d.u pp_code "string"
 
 (* Errors for arrays *)
 
 let err_exp_comma_or_eoa d ~fnd =
-  err_here d
-    "Expected %a or %a after %a but found %a"
+  err_here d "Expected %a or %a after %a but found %a"
     pp_code "," pp_code "]" pp_code "array element" pp_quchar fnd
 
-let err_unclosed_array ~first_byte ~first_line d =
-  err_to_here ~first_byte ~first_line d "Unclosed %a" pp_code "array"
-
+let err_unclosed_array d = err_here d "Unclosed %a" pp_code "array"
 let err_exp_comma_or_eoo d =
   err_here d "Expected %a or %a after %a but found: %a"
     pp_code "," pp_code "}" pp_code "object member" pp_quchar d.u
@@ -199,11 +187,9 @@ let err_exp_colon d =
   err_here d "Expected %a after %a but found %a"
     pp_code ":" pp_code "member name" pp_quchar d.u
 
-let err_unclosed_object
-    ~first_byte ~first_line d (map : ('o, 'o) Jsont.Repr.object_map)
-  =
-  err_to_here ~first_byte ~first_line d "Unclosed %a"
-    Jsont.Repr.pp_kind (Jsont.Repr.object_map_value_kind map)
+let err_unclosed_object d (map : ('o, 'o) Jsont.Repr.object_map) =
+  err_here d "Unclosed %a"
+    Jsont.Repr.pp_kind (Jsont.Repr.object_map_kinded_sort map)
 
 (* Decode next character in d.u *)
 
@@ -246,19 +232,17 @@ let rec nextc d = match available d with
     let s = setup_overlap d 0 (next_utf_8_length d) in
     nextc d; set_slice d s
 | _ ->
-    let u =
-      match Bytes.get d.i d.i_next with
-      | '\x00' .. '\x7F' as u -> (* ASCII fast path *)
-          d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
-          Char.code u
-      | _ ->
-          let udec = Bytes.get_utf_8_uchar d.i d.i_next in
-          if not (Uchar.utf_decode_is_valid udec)
-          then err_malformed_utf_8 d else
-          let u = Uchar.to_int (Uchar.utf_decode_uchar udec) in
-          let ulen = Uchar.utf_decode_length udec in
-          d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
-          u
+    let u = match Bytes.get d.i d.i_next with
+    | '\x00' .. '\x7F' as u -> (* ASCII fast path *)
+        d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
+        Char.code u
+    | _ ->
+        let udec = Bytes.get_utf_8_uchar d.i d.i_next in
+        if not (Uchar.utf_decode_is_valid udec) then err_malformed_utf_8 d else
+        let u = Uchar.to_int (Uchar.utf_decode_uchar udec) in
+        let ulen = Uchar.utf_decode_length udec in
+        d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
+        u
     in
     begin match u with
     | 0x000D (* CR *) -> d.line_start <- d.byte_count; d.line <- d.line + 1;
@@ -269,11 +253,7 @@ let rec nextc d = match available d with
     end;
     d.u <- u
 
-(* Decoder layout tracking and tokenizer *)
-
-let[@inline] ws_clear d = if d.layout then Buffer.clear d.ws
-let[@inline] ws_pop d =
-  if d.layout then (let t = Buffer.contents d.ws in ws_clear d; t) else ""
+(* Decoder tokenizer *)
 
 let[@inline] token_clear d = Buffer.clear d.token
 let[@inline] token_pop d = let t = Buffer.contents d.token in (token_clear d; t)
@@ -287,23 +267,32 @@ let[@inline] accept d = token_add d d.u; nextc d
 let token_pop_float d ~meta =
   let token = token_pop d in
   match float_of_string_opt token with
-  | None -> err_float_parse meta token (* likely [assert false] *)
-  | Some f -> f
+  | Some f -> f | None -> err_float_parse meta token (* likely [assert false] *)
+
+(* Decoder layout and position tracking *)
+
+let[@inline] ws_pop d =
+  if not d.layout then "" else
+  (let t = Buffer.contents d.ws in Buffer.clear d.ws; t)
+
+let textloc_to_current ~first_byte ~first_line d =
+  if not d.locs then Jsont.Textloc.none else
+  let last_byte = get_last_byte d and last_line = get_line_pos d in
+  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
+
+let textloc_prev_ascii_char ~first_byte ~first_line d =
+  (* N.B. when we call that the line doesn't move and the char was on
+     a single byte *)
+  if not d.locs then Jsont.Textloc.none else
+  let last_byte = get_last_byte d and last_line = get_line_pos d in
+  let last_byte = last_byte - 1 in
+  Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
+
+let meta_make d ?ws_before ?ws_after textloc =
+  if not d.locs && not d.layout then Jsont.Meta.none else
+  Jsont.Meta.make ?ws_before ?ws_after textloc
 
 (* Decoding *)
-
-let current_json_sort d = match d.u with
-| 0x0066 (* f *) | 0x0074 (* t *) -> Jsont.Sort.Bool
-| 0x006E (* n *) -> Jsont.Sort.Null
-| 0x007B (* { *) -> Jsont.Sort.Object
-| 0x005B (* [ *) -> Jsont.Sort.Array
-| 0x0022 (* DQUOTE *) -> Jsont.Sort.String
-| u when is_number_start u -> Jsont.Sort.Number
-| _ -> err_not_json_value d
-
-let type_error d t =
-  let meta = Jsont.Meta.make (textloc_current d) in
-  Jsont.Repr.type_error meta t ~fnd:(current_json_sort d)
 
 let false_uchars = [| 0x0066; 0x0061; 0x006C; 0x0073; 0x0065 |]
 let true_uchars  = [| 0x0074; 0x0072; 0x0075; 0x0065 |]
@@ -326,12 +315,12 @@ let read_json_const d const = (* First character was checked. *)
   let first_byte = get_last_byte d and first_line = get_line_pos d in
   for i = 1 to Array.length const - 1 do
     nextc d;
-    if not (Int.equal d.u const.(i)) then
-      err_exp_in_const ~first_byte ~first_line d ~exp:const.(i) ~fnd:d.u
+    if not (Int.equal d.u const.(i))
+    then err_exp_in_const ~first_byte ~first_line d ~exp:const.(i) ~fnd:d.u
         ~const:(ascii_str const)
   done;
-  let ws_after = (nextc d; read_ws d; ws_pop d) in
   let textloc = textloc_to_current d ~first_byte ~first_line in
+  let ws_after = (nextc d; read_ws d; ws_pop d) in
   meta_make d ~ws_before ~ws_after textloc
 
 let[@inline] read_json_false d = read_json_const d false_uchars
@@ -346,8 +335,7 @@ let read_json_number d = (* [is_number_start d.u] = true *)
   in
   let[@inline] read_opt_frac d = match d.u with
   | 0x002E (* . *) ->
-      accept d;
-      if not (is_digit d.u) then err_exp_digit d else read_digits d;
+      accept d; if is_digit d.u then read_digits d else err_exp_digit d
   | _ -> ()
   in
   let[@inline] read_opt_exp d = match d.u with
@@ -356,11 +344,11 @@ let read_json_number d = (* [is_number_start d.u] = true *)
       (match d.u with
       | 0x002D (* - *) | 0x002B (* + *) -> token_add d d.u; nextc d
       | _ -> ());
-      if not (is_digit d.u) then err_exp_digit d;
-      read_digits d;
+      if is_digit d.u then read_digits d else err_exp_digit d
   | _ -> ()
   in
-  let first_byte = get_last_byte d and first_line = get_line_pos d in
+  let first_byte = get_last_byte d in
+  let first_line = get_line_pos d in
   let ws_before = ws_pop d in
   token_clear d;
   if d.u = 0x002D (* - *) then accept d;
@@ -420,9 +408,8 @@ let read_json_string d = (* d.u is 0x0022 *)
   meta_make d ~ws_before ~ws_after textloc
 
 let read_json_name d =
-  let meta (* FIXME *) = read_json_string d in
-  (if d.u = 0x003A (* : *) then nextc d else err_exp_colon d);
-  meta
+  let meta = read_json_string d in
+  if d.u = 0x003A (* : *) then (nextc d; meta) else err_exp_colon d
 
 let read_json_mem_sep d =
   if d.u = 0x007D (* } *) then () else
@@ -473,25 +460,33 @@ fun d map ->
   let b, len = match (nextc d; read_ws d; d.u) with
   | 0x005D (* ] *) -> map.dec_empty (), 0
   | _ ->
-      let rec next_element d map b i =
-        let b =
-          try
-            if map.dec_skip i b
-            then (decode d (of_t Jsont.ignore); b)
-            else map.dec_add i (decode d map.elt) b
-          with
-          | Jsont.Error e ->
-              let meta = Jsont.Meta.none (* FIXME *)in
-              let imeta = meta_make d (textloc_current d) in
-              Jsont.Repr.error_push_array meta map (i, imeta) e
-        in
-        match read_ws d; d.u with
-        | 0x005D (* ] *) -> b, i + 1
-        | 0x002C (* , *) -> nextc d; next_element d map b (i + 1)
-        | u when u = eot -> err_unclosed_array ~first_byte ~first_line d
-        | fnd -> err_exp_comma_or_eoa d ~fnd
-      in
-      next_element d map (map.dec_empty ()) 0
+      let b = ref (map.dec_empty ()) in
+      let i = ref 0 in
+      let next = ref true in
+      try
+        while !next do
+          begin
+            let first_byte = get_last_byte d and first_line = get_line_pos d in
+            try
+              if map.dec_skip !i !b
+              then (decode d (of_t Jsont.ignore))
+              else (b := map.dec_add !i (decode d map.elt) !b)
+            with
+            | Jsont.Error e ->
+                let imeta = error_meta_to_current ~first_byte ~first_line d in
+                Jsont.Repr.error_push_array (error_meta d) map (!i, imeta) e
+          end;
+          incr i;
+          match (read_ws d; d.u) with
+          | 0x005D (* ] *) -> next := false
+          | 0x002C (* , *) -> nextc d
+          | u when u = eot -> err_unclosed_array d
+          | fnd -> err_exp_comma_or_eoa d ~fnd
+        done;
+        !b, !i
+      with
+      | Jsont.Error e ->
+          Jsont.Error.adjust_context ~first_byte ~first_line e
   in
   let textloc = textloc_to_current d ~first_byte ~first_line in
   let ws_after = nextc d; read_ws d; ws_pop d in
@@ -503,13 +498,13 @@ fun d map ->
   let ws_before = ws_pop d in
   let first_byte = get_last_byte d and first_line = get_line_pos d in
   let dict =
-    nextc d; read_ws d;
     try
+      nextc d; read_ws d;
       decode_object_map
         d map (Unknown_mems None) String_map.empty String_map.empty []
         Dict.empty
     with
-    | Exit -> err_unclosed_object d ~first_byte ~first_line map
+    | Jsont.Error e -> Jsont.Error.adjust_context ~first_byte ~first_line e
   in
   let textloc = textloc_to_current d ~first_byte ~first_line in
   let ws_after = nextc d; read_ws d; ws_pop d in
@@ -527,6 +522,7 @@ fun d map mem_miss mem_decs delay dict ->
   | [] -> mem_miss, rem_delay, dict
   | ((name, meta as nm), v as mem) :: delay ->
       match String_map.find_opt name mem_decs with
+      | None -> loop d map mem_miss mem_decs (mem :: rem_delay) dict delay
       | Some (Mem_dec m) ->
           let dict =
             try
@@ -538,15 +534,10 @@ fun d map mem_miss mem_decs delay dict ->
               Dict.add m.id v dict
             with
             | Jsont.Error e ->
-                let meta = Jsont.Meta.none (* FIXME *) in
-                Jsont.Repr.error_push_object meta map nm e
+                Jsont.Repr.error_push_object (error_meta d) map nm e
           in
           let mem_miss = String_map.remove name mem_miss in
           loop d map mem_miss mem_decs rem_delay dict delay
-      | None ->
-          (* TODO I think we could handle unknown here, rather than having
-             returning the rem_delay *)
-          loop d map mem_miss mem_decs (mem :: rem_delay) dict delay
   in
   loop d map mem_miss mem_decs [] dict delay
 
@@ -561,7 +552,7 @@ fun d map umems mem_miss mem_decs delay dict ->
   let mem_decs = String_map.union u mem_decs map.mem_decs in
   match map.shape with
   | Object_cases (umems', cases) ->
-      let umems' = (Unknown_mems umems') in
+      let umems' = Unknown_mems umems' in
       let umems,dict = Jsont.Repr.override_unknown_mems ~by:umems umems' dict in
       decode_object_case d map umems cases mem_miss mem_decs delay dict
   | Object_basic umems' ->
@@ -576,9 +567,8 @@ fun d map umems mem_miss mem_decs delay dict ->
       | Unknown_mems (Some (Unknown_error as u)) ->
           if delay = []
           then decode_object_basic d map u () mem_miss mem_decs dict else
-          let meta = (* FIXME *) Jsont.Meta.none in
           let fnd = List.map fst delay in
-          Jsont.Repr.unexpected_mems_error meta map ~fnd
+          Jsont.Repr.unexpected_mems_error (error_meta d) map ~fnd
       | Unknown_mems (Some (Unknown_keep (umap, _) as u)) ->
           let add_delay umems ((n, meta as nm), v) =
             try
@@ -590,8 +580,7 @@ fun d map umems mem_miss mem_decs delay dict ->
               umap.dec_add meta n v umems
             with
             | Jsont.Error e ->
-                let meta = Jsont.Meta.none (* FIXME *) in
-                Jsont.Repr.error_push_object meta map nm e
+                Jsont.Repr.error_push_object (error_meta d) map nm e
           in
           let umems = List.fold_left add_delay (umap.dec_empty ()) delay in
           decode_object_basic d map u umems mem_miss mem_decs dict
@@ -602,7 +591,7 @@ and decode_object_basic : type o p mems builder.
 =
 fun d map u umap mem_miss mem_decs dict -> match d.u with
 | 0x007D (* } *) ->
-    let meta = Jsont.Meta.none (* FIXME *) in
+    let meta = Jsont.Meta.none (* we add a correct one in decode_object *) in
     Jsont.Repr.finish_object_decode map meta u umap mem_miss dict
 | 0x0022 ->
     let meta = read_json_name d in
@@ -612,8 +601,7 @@ fun d map u umap mem_miss mem_decs dict -> match d.u with
         let mem_miss = String_map.remove name mem_miss in
         let dict = try Dict.add mem.id (decode d mem.type') dict with
         | Jsont.Error e ->
-            let ometa = Jsont.Meta.none (* FIXME *) in
-            Jsont.Repr.error_push_object ometa map (name, meta) e
+            Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
         in
         read_json_mem_sep d;
         decode_object_basic d map u umap mem_miss mem_decs dict
@@ -622,26 +610,23 @@ fun d map u umap mem_miss mem_decs dict -> match d.u with
         | Unknown_skip ->
             let () = try decode d (Jsont.Repr.of_t Jsont.ignore) with
             | Jsont.Error e ->
-                let ometa = Jsont.Meta.none (* FIXME *) in
-                Jsont.Repr.error_push_object ometa map (name, meta) e
+                Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
             in
             read_json_mem_sep d;
             decode_object_basic d map u umap mem_miss mem_decs dict
         | Unknown_error ->
-            let name = (* FIXME *) name, Jsont.Meta.none in
-            let meta = (* FIXME *) Jsont.Meta.none in
-            Jsont.Repr.unexpected_mems_error meta map ~fnd:[name]
+            let fnd = [name, meta] in
+            Jsont.Repr.unexpected_mems_error (error_meta d) map ~fnd
         | Unknown_keep (umap', _) ->
             let umap =
               try umap'.dec_add meta name (decode d umap'.mems_type) umap with
               | Jsont.Error e ->
-                  let ometa = Jsont.Meta.none (* FIXME *) in
-                  Jsont.Repr.error_push_object ometa map (name, meta) e
+                  Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
             in
             read_json_mem_sep d;
             decode_object_basic d map u umap mem_miss mem_decs dict
     end
-| u when u = eot -> raise Exit (* Ugly *)
+| u when u = eot -> err_unclosed_object d map
 | fnd -> err_exp_mem_or_eoo d
 
 and decode_object_case : type o cases tag.
@@ -653,9 +638,7 @@ fun d map umems cases mem_miss mem_decs delay dict ->
   let decode_case_tag map umems cases mem_miss mem_decs tag delay =
     let eq_tag (Case c) = cases.tag_compare c.tag tag = 0 in
     match List.find_opt eq_tag cases.cases with
-    | None ->
-        let meta = Jsont.Meta.none in (* FIXME *)
-        Jsont.Repr.unexpected_case_tag_error meta map cases tag
+    | None -> Jsont.Repr.unexpected_case_tag_error (error_meta d) map cases tag
     | Some (Case case) ->
         let dict =
           decode_object_map d case.object_map umems mem_miss mem_decs delay dict
@@ -667,19 +650,16 @@ fun d map umems cases mem_miss mem_decs delay dict ->
       (match cases.tag.dec_absent with
       | Some tag -> decode_case_tag map umems cases mem_miss mem_decs tag delay
       | None ->
-          let meta = Jsont.Meta.none in (* FIXME *)
-          let object_kind = Jsont.Repr.object_map_value_kind map in
-          Jsont.Error.missing_mems meta ~object_kind
-            ~exp:[cases.tag.name]
-            ~fnd:(List.map (fun ((n, _), _) -> n) delay))
+          let fnd = (List.map (fun ((n, _), _) -> n) delay) in
+          let exp = String_map.singleton cases.tag.name (Mem_dec cases.tag) in
+          Jsont.Repr.missing_mems_error (error_meta d) map ~exp ~fnd)
   | 0x0022 ->
       let meta = read_json_name d in
       let name = token_pop d in
       if String.equal name cases.tag.name then
         let tag = try decode d cases.tag.type' with
         | Jsont.Error e ->
-            let ometa = Jsont.Meta.none in (* FIXME *)
-            Jsont.Repr.error_push_object ometa map (name, meta) e
+            Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
         in
         read_json_mem_sep d;
         decode_case_tag map umems cases mem_miss mem_decs tag delay
@@ -689,25 +669,22 @@ fun d map umems cases mem_miss mem_decs delay dict ->
           let mem_miss = String_map.remove name mem_miss in
           let dict = try Dict.add mem.id (decode d mem.type') dict with
           | Jsont.Error e ->
-              let ometa = Jsont.Meta.none in (* FIXME *)
-              Jsont.Repr.error_push_object ometa map (name, meta) e
+              Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
           in
           read_json_mem_sep d;
           decode_object_case d map umems cases mem_miss mem_decs delay dict
       | None ->
-          (* Because JSON can be out of orer we don't know how to decode
+          (* Because JSON can be out of order we don't know how to decode
              this yet. Generic decode *)
-          let v =
-            try decode d (Jsont.Repr.of_t Jsont.json) with
-            | Jsont.Error e ->
-                let ometa = Jsont.Meta.none in
-                Jsont.Repr.error_push_object ometa map (name, meta) e
+          let v = try decode d (Jsont.Repr.of_t Jsont.json) with
+          | Jsont.Error e ->
+              Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
           in
           let delay = ((name, meta), v) :: delay in
           read_json_mem_sep d;
           decode_object_case d map umems cases mem_miss mem_decs delay dict
       end
-  | u when u = eot -> raise Exit (* Ugly *)
+  | u when u = eot -> err_unclosed_object d map
   | fnd -> err_exp_mem_or_eoo d
 
 and decode_any : type a. decoder -> a t -> a any_map -> a =
@@ -728,8 +705,7 @@ fun d t map ->
 let decode' ?layout ?locs ?file t reader =
   try
     let d = make_decoder ?layout ?locs ?file reader in
-    nextc d;
-    let v = decode d (Jsont.Repr.of_t t) in
+    let v = (nextc d; decode d (Jsont.Repr.of_t t)) in
     if d.u <> eot then err_exp_eot d else Ok v
   with Jsont.Error e -> Error e
 
@@ -750,7 +726,7 @@ type encoder =
     o_max : int; (* Max index in [o]. *)
     mutable o_next : int; (* Next writable index in [o]. *)
     format : Jsont.format;
-    number_format : (float -> unit, unit, string, unit) format4; }
+    format_number : float -> string; }
 
 let make_encoder
     ?buf:(o = Bytes.create Bytes.Slice.io_buffer_size)
@@ -758,10 +734,15 @@ let make_encoder
     writer
   =
   let len = Bytes.length o in
-  let number_format = string_of_format number_format in
-  let number_format = Scanf.format_from_string number_format "%.17g" in
+  let format_number =
+    let number_format = string_of_format number_format in
+    let number_format = Scanf.format_from_string number_format "%.17g" in
+    let b = Buffer.create 64 in
+    let get b = let f = Buffer.contents b in Buffer.clear b; f in
+    fun f -> Printf.kbprintf get b number_format f
+  in
   let o_max = len - 1 and o_next = 0 in
-  { writer; o; o_max; o_next; format; number_format }
+  { writer; o; o_max; o_next; format; format_number }
 
 let[@inline] rem_len e = e.o_max - e.o_next + 1
 
@@ -795,7 +776,7 @@ let write_json_null e = write_bytes e "null"
 let write_json_bool e b = write_bytes e (if b then "true" else "false")
 let write_json_number e f =
   if Float.is_finite f
-  then Printf.ksprintf (write_bytes e) e.number_format f
+  then (write_bytes e) (e.format_number f)
   else write_json_null e
 
 let write_json_string e s =
@@ -962,11 +943,8 @@ fun ~nest map ~do_unknown e ~start o ->
         if not start then write_char e ',';
         if e.format = Jsont.Indent then encode_mem_indent ~nest e;
         let meta =
-          (* FIXME I think [mem_map] is a bit wrang it should
-                  an enc_name_meta : Context.t -> 'o -> Meta.t
-                  or simply rename enc_meta to enc_name_meta
-          *)
-          if e.format = Jsont.Layout then mmap.enc_meta v else Jsont.Meta.none
+          (* if e.format = Jsont.Layout then mmap.enc_name_meta v else *)
+          Jsont.Meta.none
         in
         encode_mem_name e meta mmap.name;
         encode ~nest mmap.type' e v;

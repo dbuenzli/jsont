@@ -85,26 +85,27 @@ let get ~file ~path ~format ~number_format ~diff ~absent ~locs =
   let get = Jsont.path ?absent path Jsont.json in
   trip_type ~file ~format ~number_format ~diff ~locs get
 
-let pp_locs_outline ppf v =
-  let indent = 2 in
-  let loc label ppf m =
-    Fmt.pf ppf "@[<v>%s:@,%a@]@,"
-      label Jsont.Textloc.pp_ocaml (Jsont.Meta.textloc m)
-  in
-  let rec value ppf = function
-  | Jsont.Null ((), m) ->
-      loc (Fmt.str "%a" Fmt.(code' Jsont.pp_null) ()) ppf m
-  | Jsont.Bool (b, m) ->
-      loc (Fmt.str "Bool %a" Fmt.(code' bool) b) ppf m
-  | Jsont.Number (n, m) ->
-      loc (Fmt.str "Number %a" Fmt.(code' Jsont.pp_number) n) ppf m
-  | Jsont.String (s, m) ->
+let locs' ~file =
+  let pp_locs_outline ppf v =
+    let indent = 2 in
+    let loc label ppf m =
+      Fmt.pf ppf "@[<v>%s:@,%a@]@,"
+        label Jsont.Textloc.pp_ocaml (Jsont.Meta.textloc m)
+    in
+    let rec value ppf = function
+    | Jsont.Null ((), m) ->
+        loc (Fmt.str "%a" Fmt.(code' Jsont.pp_null) ()) ppf m
+    | Jsont.Bool (b, m) ->
+        loc (Fmt.str "Bool %a" Fmt.(code' bool) b) ppf m
+    | Jsont.Number (n, m) ->
+        loc (Fmt.str "Number %a" Fmt.(code' Jsont.pp_number) n) ppf m
+    | Jsont.String (s, m) ->
       loc (Fmt.str "String %a" (Fmt.code' Fmt.text_string_literal) s) ppf m
-  | Jsont.Array (l, m) ->
-      Format.pp_open_vbox ppf indent;
-      loc "Array" ppf m; (Fmt.list value) ppf l;
-      Format.pp_close_box ppf ()
-  | Jsont.Object (o, m) ->
+    | Jsont.Array (l, m) ->
+        Format.pp_open_vbox ppf indent;
+        loc "Array" ppf m; (Fmt.list value) ppf l;
+        Format.pp_close_box ppf ()
+    | Jsont.Object (o, m) ->
       let mem ppf ((name, m), v) =
         let l = Fmt.str "Member %a" (Fmt.code' Fmt.text_string_literal) name in
         loc l ppf m; value ppf v;
@@ -112,19 +113,20 @@ let pp_locs_outline ppf v =
       Format.pp_open_vbox ppf indent;
       loc "Object" ppf m; (Fmt.list mem) ppf o;
       Format.pp_close_box ppf ()
+    in
+    value ppf v
   in
-  value ppf v
-
-let output_locs ~file ~locs =
   Log.if_error ~use:exit_err_file @@
   with_infile file @@ fun reader ->
   Log.if_error ~use:exit_err_json @@
-  let* j = Jsont_bytesrw.decode ~file ~locs Jsont.json reader in
+  let* j = Jsont_bytesrw.decode ~file ~locs:true Jsont.json reader in
   pp_locs_outline Format.std_formatter j;
   Ok 0
 
-let set ~file ~path ~format ~number_format ~diff ~allow_absent ~json:j ~locs =
-  let set = Jsont.set_path ~allow_absent Jsont.json path j in
+let set
+    ~file ~path ~format ~number_format ~diff ~allow_absent ~stub ~json:j ~locs
+  =
+  let set = Jsont.set_path ?stub ~allow_absent Jsont.json path j in
   trip_type ~file ~format ~number_format ~diff ~locs set
 
 (* Command line interface *)
@@ -138,8 +140,7 @@ let exits =
   Cmd.Exit.info exit_err_diff ~doc:"on JSON output differences." ::
   Cmd.Exit.defaults
 
-let path_arg = Arg.conv' ~docv:"JPATH" Jsont.Path.(of_string, pp)
-let caret_arg = Arg.conv' ~docv:"JCARET" Jsont.Caret.(of_string, pp)
+let path_arg = Arg.conv' ~docv:"JSON_PATH" Jsont.Path.(of_string, pp)
 let json_arg =
   let of_string s =
     Jsont_bytesrw.decode_string ~locs:true ~layout:true Jsont.json s
@@ -166,12 +167,12 @@ let format_opt_default_pretty = format_opt ~default:`Pretty
 let format_opt_default_preserve = format_opt ~default:(`Format Jsont.Layout)
 
 let allow_absent_opt =
-  let doc = "Do not error if $(i,JPATH) does not exist." in
+  let doc = "Do not error if $(i,JSON_PATH) does not exist." in
   Arg.(value & flag & info ["a"; "allow-absent"] ~doc)
 
 let locs =
-  let doc = "Do not keep track of source locations." in
-  Term.(const ( not ) $ Arg.(value & flag & info ["no-locs"] ~doc))
+  let doc = "Keep track of source locations (improves error messages)." in
+  Arg.(value & flag & info ["locs"] ~doc)
 
 let number_format_opt =
   let doc = "Use C float format string $(docv) to format JSON numbers." in
@@ -217,14 +218,15 @@ let delete_cmd =
   let sdocs = Manpage.s_common_options in
   let man = [
     `S Manpage.s_description;
-    `P "$(tname) deletes the value indexed by a JSON path. Outputs \
-        $(b,null) if the path is empty. For example:";
-    `Pre "$(iname) $(b,keywords.[0] package.json)";
+    `P "$(iname) deletes the value indexed by a JSON path. Outputs $(b,null) \
+        on the root path $(b,'.'). Examples:";
+    `Pre "$(iname) $(b,keywords.[0] package.json)"; `Noblank;
+    `Pre "$(iname) $(b,-a keywords.[0] package.json)";
     `Blocks common_man; ]
   in
   let path_opt =
-    let doc = "Delete JSON path $(docv)." in
-    Arg.(required & pos 0 (some path_arg) None & info [] ~doc ~docv:"JPATH")
+    let doc = "Delete JSON path $(docv)." and docv = "JSON_PATH" in
+    Arg.(required & pos 0 (some path_arg) None & info [] ~doc ~docv)
   in
   Cmd.v (Cmd.info "delete" ~doc ~sdocs ~exits ~man) @@
   let+ file = file_pos1
@@ -241,7 +243,8 @@ let fmt_cmd =
   let sdocs = Manpage.s_common_options in
   let man = [
     `S Manpage.s_description;
-    `P "$(tname) formats the given JSON data. For example:";
+    `P "$(iname) formats JSON. Examples:";
+    `Pre "$(iname) $(b,package.json)"; `Noblank;
     `Pre "$(iname) $(b,-f minify package.json)";
     `Blocks common_man; ]
   in
@@ -259,17 +262,21 @@ let get_cmd =
   let sdocs = Manpage.s_common_options in
   let man = [
     `S Manpage.s_description;
-    `P "$(tname) outputs the value indexed by a JSON path. For example:";
-    `Pre "$(iname) $(b,'.' package.json)"; `Noblank;
-    `Pre "$(iname) $(b,'keywords.[0]' package.json)";
+    `P "$(iname) outputs the value indexed by a JSON path. Examples:";
+    `Pre "$(iname) $(b,'keywords.[0]' package.json)"; `Noblank;
+    `Pre "$(iname) $(b,-a 'null' 'keywords.[0]' package.json)"; `Noblank;
+    `Pre "$(iname) $(b,-a '[]' 'keywords' package.json)"; `Noblank;
+    `Pre "$(iname) $(b,'.' package.json)";
     `Blocks common_man; ]
   in
   let path_pos =
     let doc = "Extract the value indexed by JSON path $(docv)." in
-    Arg.(required & pos 0 (some path_arg) None & info [] ~doc ~docv:"JPATH")
+    Arg.(required & pos 0 (some path_arg) None & info [] ~doc ~docv:"JSON_PATH")
   in
   let absent_opt =
-    let doc = "$(docv) to return if the path does not exist." in
+    let doc = "Do not error if $(i,JSON_PATH) does not exist, output $(docv) \
+               instead."
+    in
     Arg.(value & opt (some json_arg) None &
          info ["a"; "absent"] ~doc ~docv:"JSON")
   in
@@ -288,41 +295,55 @@ let set_cmd =
   let sdocs = Manpage.s_common_options in
   let man = [
     `S Manpage.s_description;
-    `P "$(tname) sets the value indexed by a JSON path. For example:";
+    `P "$(iname) sets the value indexed by a JSON path. Examples:";
+    `Pre "$(iname) $(b,keywords '[\"codec\"]' package.json)"; `Noblank;
+    `Pre "$(iname) $(b,keywords.[0] '\"codec\"' package.json)"; `Noblank;
+    `Pre "$(iname) $(b,-a keywords.[4] '\"codec\"' package.json)"; `Noblank;
+    `Pre "$(iname) $(b,-s null -a keywords.[4] '\"codec\"' package.json)";
     `Blocks common_man; ]
   in
   let path_pos =
     let doc = "Set the value indexed by JSON path $(docv)." in
-    Arg.(required & pos 0 (some path_arg) None & info [] ~doc ~docv:"JPATH")
+    Arg.(required & pos 0 (some path_arg) None & info [] ~doc ~docv:"JSON_PATH")
   in
   let json_pos =
-    let doc = "$(docv) to insert or substitute" in
+    let doc = "Set value to $(docv)." in
     Arg.(required & pos 1 (some json_arg) None & info [] ~doc ~docv:"JSON")
+  in
+  let stub =
+    let doc =
+      "Use $(b,docv) as a stub value to use if an array needs to be extended \
+       when $(b,-a) is used. By default uses the natural zero of the \
+       set data: null for null, false for booleans, 0 for numbers, empty
+       string for strings, empty array for array, empty object for object."
+    in
+    Arg.(value & opt (some json_arg) None & info ["s"; "stub"] ~doc
+           ~docv:"JSON")
   in
   Cmd.v (Cmd.info "set" ~doc ~sdocs ~exits ~man) @@
   let+ file = file_pos2
   and+ path = path_pos
   and+ json = json_pos
+  and+ stub = stub
   and+ format = format_opt_default_preserve
   and+ number_format = number_format_opt
   and+ diff = diff_flag
   and+ allow_absent = allow_absent_opt
   and+ locs = locs in
-  set ~file ~path ~format ~number_format ~diff ~allow_absent ~json ~locs
+  set ~file ~path ~format ~number_format ~diff ~allow_absent ~stub ~json ~locs
 
 let locs_cmd =
   let doc = "Show JSON parse locations" in
   let sdocs = Manpage.s_common_options in
   let man = [
     `S Manpage.s_description;
-    `P "$(tname) outputs JSON parse locations. For example:";
-    `Pre "$(iname) package.json)";
+    `P "$(tname) outputs JSON parse locations. Example:";
+    `Pre "$(iname) $(b,package.json)";
     `Blocks common_man; ]
   in
   Cmd.v (Cmd.info "locs" ~doc ~sdocs ~exits ~man) @@
-  let+ file = file_pos0
-  and+ locs = locs in
-  output_locs ~file ~locs
+  let+ file = file_pos0 in
+  locs' ~file
 
 let jsont =
   let doc = "Process JSON data" in
@@ -330,17 +351,25 @@ let jsont =
   let man = [
     `S Manpage.s_description;
     `P "$(mname) processes JSON data in various ways.";
-    `Pre "$(b,curl -L URL) | $(mname) $(b,fmt -)"; `Noblank;
-    `Pre "$(mname) $(b,get '.' package.json)"; `Noblank;
-    `Pre "$(mname) $(b,get 'keywords.[0]' package.json)";
+    `Pre "$(b,curl -L URL) | $(mname) $(b,fmt)"; `Noblank;
+    `Pre "$(mname) $(b,fmt package.json)"; `Noblank;
+    `Pre "$(mname) $(b,get 'keywords.[0]' package.json)"; `Noblank;
+    `Pre "$(mname) $(b,set 'keywords.[0]' '\"codec\"' package.json)"; `Noblank;
+    `Pre "$(mname) $(b,delete 'keywords.[0]' package.json)";
+    `P "More information about $(b,jsont)'s JSON paths is in the section \
+        JSON PATHS below.";
+    `S Manpage.s_commands;
+    `S Manpage.s_common_options;
+    `S "JSON PATHS";
     `P "For $(mname) a JSON path is a dot separated sequence of \
         indexing operations. For example $(b,books.[1].authors.[0]) indexes \
         an object on the $(b,books) member, then on the second element of \
         an array, then the $(b,authors) member of an object and finally \
-        the first element of that array.";
-    `P "In general because of your shell's special characters you are better \
-        off single quoting your JSON paths.";
-    `P "Note that $(mname) JSON PATH are unrelated to the JSONPath \
+        the first element of that array. The root path is $(b,.), it can
+        be omitted if there are indexing operations.";
+    `P "In general because of your shell's special characters it's better \
+        to single quote your JSON paths.";
+    `P "Note that $(mname)'s JSON PATH are unrelated to the JSONPath \
         query language (RFC 9535).";
     `Blocks common_man; ]
   in

@@ -7,7 +7,7 @@ provides:
   choice. The descriptions can be used by generic functions to
   decode, encode, query and update JSON data without having to
   construct a generic JSON representation.
-- A JSON codec with optional text location tracking and layout
+- A {{!Jsont_bytesrw}JSON codec} with optional text location tracking and layout
   preservation. The codec is compatible with effect-based concurrency.
 
 The descriptions are independent from the codec and can be used by
@@ -25,7 +25,7 @@ The following manuals are available.
    data modelling recipes.}}
 
 The {{:https://github.com/dbuenzli/jsont/tree/master/test}test directory}
-in the repository of Jsont has a few more examples.
+in the source repository of Jsont has a few more examples.
 
 {1:jsont Library [jsont]}
 
@@ -85,8 +85,8 @@ module Item = struct
     Jsont.Object.map ~kind:"Item" make
     |> Jsont.Object.mem "task" Jsont.string ~enc:task
     |> Jsont.Object.mem "status" Status.jsont ~enc:status
-    |> Jsont.Object.mem "tags"
-         Jsont.(list string) ~dec_absent:[] ~enc:tags ~enc_omit:(( = ) [])
+    |> Jsont.Object.mem "tags" Jsont.(list string) ~enc:tags
+      ~dec_absent:[] ~enc_omit:(( = ) [])
     |> Jsont.Object.finish
 end
 ]}
@@ -112,4 +112,4 @@ The {{!page-cookbook}cookbook} has more JSON modelling recipes, the
 {{:https://erratique.ch/repos/jsont/tree/test/topojson.ml}[topojson.ml]}
 and
 {{:https://erratique.ch/repos/jsont/tree/test/geojson.ml}[geojson.ml]}
-in the repository provide full examples of JSON schema modelisation.
+in the source repository provide full examples of JSON schema modelisation.

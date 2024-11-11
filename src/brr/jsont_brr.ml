@@ -211,10 +211,9 @@ fun map umems cases mem_decs dict names jv ->
       match cases.tag.dec_absent with
       | Some tag -> decode_case_tag tag
       | None ->
-          let meta = Jsont.Meta.none in
-          let object_kind = Jsont.Repr.object_map_value_kind map in
-          Jsont.Error.missing_mems meta ~object_kind ~exp:[cases.tag.name]
-            ~fnd:(jv_mem_name_list jv)
+          let exp = String_map.singleton cases.tag.name (Mem_dec cases.tag) in
+          let fnd = jv_mem_name_list jv in
+          Jsont.Repr.missing_mems_error Jsont.Meta.none map ~exp ~fnd
 
 and decode_any : type a. a t -> a any_map -> Jv.t -> a =
 fun t map jv ->

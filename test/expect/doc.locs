@@ -13,7 +13,7 @@ File "doc.json", lines 1-10, characters 0-1
   Member [01m"deprecated"[m:
   File "doc.json", line 3, characters 2-14
   Bool [01mfalse[m:
-  File "doc.json", line 3, characters 16-23
+  File "doc.json", line 3, characters 16-21
   
   Member [01m"ignore"[m:
   File "doc.json", line 4, characters 2-10
@@ -83,12 +83,12 @@ File "doc.json", lines 1-10, characters 0-1
       Member [01m"hu"[m:
       File "doc.json", line 6, characters 92-96
       [01mnull[m:
-      File "doc.json", line 6, characters 97-104
+      File "doc.json", line 6, characters 97-101
       
   Member [01m"metameta"[m:
   File "doc.json", line 7, characters 2-12
   Bool [01mtrue[m:
-  File "doc.json", line 7, characters 14-19
+  File "doc.json", line 7, characters 14-18
   
   Member [01m"obj"[m:
   File "doc.json", line 8, characters 2-7
@@ -97,5 +97,5 @@ File "doc.json", lines 1-10, characters 0-1
     Member [01m"magic"[m:
     File "doc.json", line 9, characters 4-11
     [01mnull[m:
-    File "doc.json", line 9, characters 13-19
+    File "doc.json", line 9, characters 13-17
     

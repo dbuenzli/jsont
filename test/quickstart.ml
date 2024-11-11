@@ -34,8 +34,8 @@ module Item = struct
     Jsont.Object.map ~kind:"Item" make
     |> Jsont.Object.mem "task" Jsont.string ~enc:task
     |> Jsont.Object.mem "status" Status.jsont ~enc:status
-    |> Jsont.Object.mem "tags"
-         Jsont.(list string) ~dec_absent:[] ~enc:tags ~enc_omit:(( = ) [])
+    |> Jsont.Object.mem "tags" Jsont.(list string) ~enc:tags
+      ~dec_absent:[] ~enc_omit:(( = ) [])
     |> Jsont.Object.finish
 end
 

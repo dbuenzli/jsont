@@ -16,14 +16,20 @@
    Feature objects. We handle this by redoing the cases to handle only
    the subsets. *)
 
+type float_array = float array
+let float_array_jsont ~kind = Jsont.array ~kind Jsont.number
+
+type 'a garray = 'a array
+let garray = Jsont.array
+
 module Bbox = struct
-  type t = float array
-  let jsont = Jsont.(array ~kind:"Bbox" number)
+  type t = float_array
+  let jsont = float_array_jsont ~kind:"Bbox"
 end
 
 module Position = struct
-  type t = float array
-  let jsont = Jsont.(array ~kind:"Position" number)
+  type t = float_array
+  let jsont = float_array_jsont ~kind:"Position"
 end
 
 module Geojson_object = struct
@@ -55,36 +61,34 @@ module Point = struct
 end
 
 module Multi_point = struct
-  type t = Position.t array
+  type t = Position.t garray
   let jsont =
-    Geojson_object.geometry ~kind:"MultiPoint" (Jsont.array Position.jsont)
+    Geojson_object.geometry ~kind:"MultiPoint" (garray Position.jsont)
 end
 
 module Line_string = struct
-  type t = Position.t array
+  type t = Position.t garray
   let jsont =
-    Geojson_object.geometry ~kind:"LineString" (Jsont.array Position.jsont)
+    Geojson_object.geometry ~kind:"LineString" (garray Position.jsont)
 end
 
 module Multi_line_string = struct
-  type t = Line_string.t array
+  type t = Line_string.t garray
   let jsont =
-    Geojson_object.geometry ~kind:"LineString"
-      Jsont.(array (array Position.jsont))
+    Geojson_object.geometry ~kind:"LineString" (garray (garray Position.jsont))
 end
 
 module Polygon = struct
-  type t = Line_string.t array
+  type t = Line_string.t garray
   let jsont =
-    Geojson_object.geometry ~kind:"Polygon"
-      Jsont.(array (array Position.jsont))
+    Geojson_object.geometry ~kind:"Polygon" (garray (garray Position.jsont))
 end
 
 module Multi_polygon = struct
-  type t = Polygon.t array
+  type t = Polygon.t garray
   let jsont =
     Geojson_object.geometry ~kind:"MultiPolygon"
-       Jsont.(array (array (array Position.jsont)))
+      (garray (garray (garray Position.jsont)))
 end
 
 module Geojson = struct
@@ -180,7 +184,7 @@ module Geojson = struct
     in
     Jsont.Object.map ~kind:"Geometry object" Fun.id
     |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
-      ~tag_to_string:Fun.id
+      ~tag_to_string:Fun.id ~tag_compare:String.compare
     |> Jsont.Object.finish
   end
 
@@ -190,7 +194,7 @@ module Geojson = struct
     let cases = Jsont.Object.Case.[ make case_feature ] in
     Jsont.Object.map ~kind:"Feature" Fun.id
     |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
-      ~tag_to_string:Fun.id
+      ~tag_to_string:Fun.id ~tag_compare:String.compare
     |> Jsont.Object.finish
   end
 
@@ -255,7 +259,7 @@ module Geojson = struct
     in
     Jsont.Object.map ~kind:"GeoJSON" Fun.id
     |> Jsont.Object.case_mem "type" Jsont.string ~enc:Fun.id ~enc_case cases
-      ~tag_to_string:Fun.id
+      ~tag_to_string:Fun.id ~tag_compare:String.compare
     |> Jsont.Object.finish
   end
 
@@ -267,8 +271,13 @@ end
 let ( let* ) = Result.bind
 let strf = Printf.sprintf
 
-let log_err fmt = Format.eprintf ("@[Error: " ^^ fmt ^^ "@]@.")
-let log_if_error ~use = function Error e -> log_err "%s" e; use | Ok v -> v
+let log_if_error ~use = function
+| Ok v -> v
+| Error e ->
+    let lines = String.split_on_char '\n' e in
+    Format.eprintf "@[%a @[<v>%a@]@]"
+      Jsont.Error.puterr () (Format.pp_print_list Format.pp_print_string) lines;
+    use
 
 let with_infile file f = (* XXX add something to bytesrw. *)
   let process file ic = try Ok (f (Bytesrw.Bytes.Reader.of_in_channel ic)) with
@@ -298,7 +307,7 @@ let geojson =
     let doc = "$(docv) is the GeoJSON file. Use $(b,-) for stdin." in
     Arg.(value & pos 0 string "-" & info [] ~doc ~docv:"FILE")
   and+ locs =
-    let doc = "Preserve locations (for errors)." in
+    let doc = "Preserve locations (better errors)." in
     Arg.(value & flag & info ["l"; "locs"] ~doc)
   and+ format =
     let fmt = [ "indent", Jsont.Indent; "minify", Jsont.Minify ] in
