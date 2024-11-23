@@ -9,7 +9,7 @@ open Jsont.Repr
 (* XXX add these things to Stdlib.Uchar *)
 
 let uchar_max_utf_8_byte_length = 4
-let[@inline] uchar_utf_8_byte_decode_length b = match Char.unsafe_chr b with
+let[@inline] uchar_utf_8_byte_decode_length = function
 | '\x00' .. '\x7F' -> 1
 | '\x80' .. '\xC1' -> 0
 | '\xC2' .. '\xDF' -> 2
@@ -196,9 +196,6 @@ let err_unclosed_object d (map : ('o, 'o) Jsont.Repr.object_map) =
 let[@inline] is_eoslice d = d.i_next > d.i_max
 let[@inline] is_eod d = d.i_max = - 1 (* Only happens on Slice.eod *)
 let[@inline] available d = d.i_max - d.i_next + 1
-let[@inline] next_utf_8_length d =
-  uchar_utf_8_byte_decode_length (Stdlib.Bytes.get_uint8 d.i d.i_next)
-
 let[@inline] set_slice d slice =
   d.i <- Bytes.Slice.bytes slice;
   d.i_next <- Bytes.Slice.first slice;
@@ -223,35 +220,40 @@ let rec setup_overlap d start need = match need with
     d.i_next <- d.i_next + take; d.byte_count <- d.byte_count + take;
     setup_overlap d (start + take) (need - take)
 
-let rec nextc d = match available d with
-| a when a <= 0 ->
-    if is_eod d
-    then d.u <- eot
-    else (set_slice d (Bytes.Reader.read d.reader); nextc d)
-| a when a < uchar_max_utf_8_byte_length && a < next_utf_8_length d ->
-    let s = setup_overlap d 0 (next_utf_8_length d) in
+let rec nextc d =
+  let a = available d in
+  if a <= 0 then
+    (if is_eod d
+     then d.u <- eot
+     else (set_slice d (Bytes.Reader.read d.reader); nextc d))
+  else
+  let b = Bytes.get d.i d.i_next in
+  if a < uchar_max_utf_8_byte_length &&
+     a < uchar_utf_8_byte_decode_length b then begin
+    let s = setup_overlap d 0 (uchar_utf_8_byte_decode_length b) in
     nextc d; set_slice d s
-| _ ->
-    let u = match Bytes.get d.i d.i_next with
-    | '\x00' .. '\x7F' as u -> (* ASCII fast path *)
-        d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
-        Char.code u
-    | _ ->
-        let udec = Bytes.get_utf_8_uchar d.i d.i_next in
-        if not (Uchar.utf_decode_is_valid udec) then err_malformed_utf_8 d else
-        let u = Uchar.to_int (Uchar.utf_decode_uchar udec) in
-        let ulen = Uchar.utf_decode_length udec in
-        d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
-        u
-    in
-    begin match u with
-    | 0x000D (* CR *) -> d.line_start <- d.byte_count; d.line <- d.line + 1;
-    | 0x000A (* LF *) ->
-        d.line_start <- d.byte_count;
-        if d.u <> 0x000D then d.line <- d.line + 1;
-    | _ -> ()
-    end;
-    d.u <- u
+  end else
+  d.u <- match b with
+  | '\x00' .. '\x09' | '\x0B' | '\x0E' .. '\x7F' as u -> (* ASCII fast path *)
+      d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
+      Char.code u
+  | '\x0D' (* CR *) ->
+      d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
+      d.line_start <- d.byte_count; d.line <- d.line + 1;
+      0x000D
+  | '\x0A' (* LF *) ->
+      d.i_next <- d.i_next + 1; d.byte_count <- d.byte_count + 1;
+      d.line_start <- d.byte_count;
+      if d.u <> 0x000D then d.line <- d.line + 1;
+      0x000A
+  | _ ->
+      let udec = Bytes.get_utf_8_uchar d.i d.i_next in
+      if not (Uchar.utf_decode_is_valid udec) then err_malformed_utf_8 d else
+      let u = Uchar.to_int (Uchar.utf_decode_uchar udec) in
+      let ulen = Uchar.utf_decode_length udec in
+      d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
+      u
+
 
 (* Decoder tokenizer *)
 
