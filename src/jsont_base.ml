@@ -122,8 +122,7 @@ module Rarray = struct
   let empty () = { els = [||]; max = -1 }
   let grow a v =
     let len = a.max + 1 in
-    let nlen = if len = 0 then 256 else len in
-    let els' = Array.make (2 * nlen) v in
+    let els' = Array.make (2 * (if len = 0 then 1 else len)) v in
     Array.blit a.els 0 els' 0 len; a.els <- els'
 
   let length a = a.max + 1
@@ -153,7 +152,7 @@ module Rbigarray1 = struct
 
   let grow a v =
     let len = a.max + 1 in
-    let len = if len = 0 then 256 else len in
+    let len = if len = 0 then 1 else len in
     let init i = Bigarray.Array1.(if i <= a.max then get a.els i else v) in
     let k, l = Bigarray.Array1.(kind a.els, layout a.els) in
     let els' = Bigarray.Array1.init k l (2 * len) init in
