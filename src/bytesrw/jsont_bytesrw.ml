@@ -728,7 +728,7 @@ type encoder =
     o_max : int; (* Max index in [o]. *)
     mutable o_next : int; (* Next writable index in [o]. *)
     format : Jsont.format;
-    format_number : float -> string; }
+    number_format : string; }
 
 let make_encoder
     ?buf:(o = Bytes.create Bytes.Slice.io_buffer_size)
@@ -736,15 +736,9 @@ let make_encoder
     writer
   =
   let len = Bytes.length o in
-  let format_number =
-    let number_format = string_of_format number_format in
-    let number_format = Scanf.format_from_string number_format "%.17g" in
-    let b = Buffer.create 64 in
-    let get b = let f = Buffer.contents b in Buffer.clear b; f in
-    fun f -> Printf.kbprintf get b number_format f
-  in
+  let number_format = string_of_format number_format in
   let o_max = len - 1 and o_next = 0 in
-  { writer; o; o_max; o_next; format; format_number }
+  { writer; o; o_max; o_next; format; number_format }
 
 let[@inline] rem_len e = e.o_max - e.o_next + 1
 
@@ -776,9 +770,14 @@ let write_ws_before e m = write_bytes e (Jsont.Meta.ws_before m)
 let write_ws_after e m = write_bytes e (Jsont.Meta.ws_after m)
 let write_json_null e = write_bytes e "null"
 let write_json_bool e b = write_bytes e (if b then "true" else "false")
+
+(* XXX we bypass the printf machinery as it costs quite quite a bit.
+   Would be even better if we could format directly to a bytes values
+   rather than allocating a string per number. *)
+external format_float : string -> float -> string = "caml_format_float"
 let write_json_number e f =
   if Float.is_finite f
-  then (write_bytes e) (e.format_number f)
+  then write_bytes e (format_float e.number_format f)
   else write_json_null e
 
 let write_json_string e s =
