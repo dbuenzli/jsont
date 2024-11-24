@@ -173,18 +173,6 @@ module Path : sig
   val of_string : string -> (t, string) result
   val pp : t fmt
   val pp_trace : t fmt
-
-  module Caret : sig
-    type path := t
-    type pos = Before | Over | After
-    type t = pos * path
-    val of_string : string -> (t, string) result
-    val pp : t fmt
-  end
-
-  val over : t -> Caret.t
-  val before : t -> Caret.t
-  val after : t -> Caret.t
 end
 
 (** See {!Jsont.Sort} *)

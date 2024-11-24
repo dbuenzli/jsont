@@ -620,54 +620,6 @@ module Path = struct
       let start = if s.[0] = '.' then 1 else 0 in
       Ok (loop [] s start (String.length s - 1))
     with Failure e -> Error e
-
-  (* Carets *)
-
-  module Caret = struct
-    type path = t
-    type pos = Before | Over | After
-    type t = pos * path
-    let pp ppf = function
-    | Over, p -> pp ppf p
-    | Before, (c :: p)->
-        pp ppf p;
-        (if p <> [] then Fmt.char ppf '.');
-        Fmt.char ppf 'v'; pp_bracketed_index ppf c
-    | After, (c :: p) ->
-        pp ppf p;
-        (if p <> [] then Fmt.char ppf '.');
-        pp_bracketed_index ppf c; Fmt.char ppf 'v'
-    | _ -> ()
-
-    (* Parsing *)
-
-    let of_string s =
-      let rec loop p s i max =
-        if i > max then Over, p else
-        let next = i + 1 in
-        match s.[i] with
-        | 'v' when next <= max && s.[next] = '[' ->
-            let next, p = parse_index p s next max in
-            parse_eoi s next max; Before, p
-        | c ->
-            let next, p = parse_index p s i max in
-            if next > max then Over, p else
-            if s.[next] = 'v'
-            then (parse_eoi s (next + 1) max; After, p) else
-            if s.[next] <> '.' then err_unexp_char next s else
-            if next + 1 <= max then loop p s (next + 1) max else
-            err_unexp_eoi next
-      in
-      try
-        if s = "" then Ok (Over, []) else
-        let start = if s.[0] = '.' then 1 else 0 in
-        Ok (loop [] s start (String.length s - 1))
-      with Failure e -> Error e
-  end
-
-  let over p = Caret.Over, p
-  let after p = Caret.After, p
-  let before p = Caret.Before, p
 end
 
 (* JSON sorts *)

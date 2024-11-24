@@ -299,61 +299,16 @@ module Path : sig
   val pp_trace : t fmt
   (** [pp_trace] formats paths as a stack trace, if not empty. *)
 
-  (** {1:carets Carets} *)
+  (** {1:path_syntax Path syntax}
 
-  (** Carets.
-
-      A path and a spatial localisation. *)
-  module Caret : sig
-
-    (** {1:caret Carets} *)
-
-    type path := t
-
-    type pos =
-    | Before (** The void before the data indexed by a path. *)
-    | Over (** The data indexed by a path. *)
-    | After (** The void after the data indexed by a path. *)
-    (** The type for caret positions. *)
-
-    type t = pos * path
-    (** The type for carets. A path and a caret position. *)
-
-    val of_string : string -> (t, string) result
-    (** [of_string s] parses a caret according to
-        the {{!path_caret_syntax}caret syntax} .*)
-
-    val pp : t fmt
-    (** [pp] formats carets. *)
-  end
-
-  val over : t -> Caret.t
-  (** [over p] is the data at the path [p]. *)
-
-  val before : t -> Caret.t
-  (** [before p] is the void before the path [p]. *)
-
-  val after : t -> Caret.t
-  (** [after p] is the void after the path [p]. *)
-
-  (** {1:path_caret_syntax Path & caret syntax}
-
-      Path and carets provide a way for end users to address JSON and
-      edit locations.
+      Path provide a way for end users to address JSON and edit locations.
 
       A {e path} is a sequence of member and list indexing
       operations. Applying the path to a JSON value leads to either a
       JSON value or nothing if one of the indices does not exist, or
       an error if ones tries to index a non-indexable value.
 
-      A {e caret} is a path and a spatial specification for the JSON
-      construct found by the path. The caret indicates either the void
-      {e before} that JSON construct, the JSON value itself ({e over}) or
-      the void {e after} it.
-
-      Here are a few examples of paths and carets, syntactically the
-      charater ['v'] is used to denote the caret's insertion point before or
-      after a path. There's no distinction between a path and an over caret.
+      Here are a few examples of paths.
 
       {@json[
         {
@@ -365,16 +320,8 @@ module Path : sig
 
       {@shell[
       ocaml.libs        # value of member "libs" of member "ocaml"
-      ocaml.v[libs]     # void before the "libs" member
-      ocaml.[libs]v     # void after "libs" member
-
       ocaml.libs.[0]    # first element of member "libs" of member "ocaml"
-      ocaml.libs.v[0]   # void before first element
-      ocaml.libs.[0]v   # void after first element
-
       ocaml.libs.[-1]   # last element of member "libs" of member "ocaml"
-      ocaml.libs.v[-1]  # before last element (if any)
-      ocaml.libs.[-1]v  # after last element (if any)
       ]}
 
       More formally a {e path} is a [.] seperated list of indices.
@@ -383,11 +330,6 @@ module Path : sig
       with negative indices counting from the end of the list ([-1] is
       the last element). Or [i] can be an object member name [n]. If
       there is no ambiguity, the surrounding brackets can be dropped.
-
-      A {e caret} is a path whose last index brackets can be prefixed or
-      suffixed by an insertion point, represented by the character
-      ['v'].  This respectively denote the void before or after the
-      JSON construct found by the path.
 
       {b Notes.}
       {ul
