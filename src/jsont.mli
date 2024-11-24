@@ -256,10 +256,7 @@ module Path : sig
 
   type index =
   | Mem of string node (** Indexes the value of the member [n] of an object. *)
-  | Nth of int node
-  (** Indexes the value of the [n]th element of an array. If negative counts
-      the number of elements from the end: [-1] is that last element. This
-      may not supported by all operations accepting index values. *)
+  | Nth of int node (** Indexes the value of the [n]th element of an array. *)
   (** The type for indexing operations on JSON values. *)
 
   val pp_index : index fmt
@@ -321,15 +318,13 @@ module Path : sig
       {@shell[
       ocaml.libs        # value of member "libs" of member "ocaml"
       ocaml.libs.[0]    # first element of member "libs" of member "ocaml"
-      ocaml.libs.[-1]   # last element of member "libs" of member "ocaml"
       ]}
 
       More formally a {e path} is a [.] seperated list of indices.
 
-      An {e index} is written [[i]]. [i] can a zero-based list index
-      with negative indices counting from the end of the list ([-1] is
-      the last element). Or [i] can be an object member name [n]. If
-      there is no ambiguity, the surrounding brackets can be dropped.
+      An {e index} is written [[i]]. [i] can a zero-based list
+      index. Or [i] can be an object member name [n]. If there is no
+      ambiguity, the surrounding brackets can be dropped.
 
       {b Notes.}
       {ul
@@ -337,7 +332,8 @@ module Path : sig
          means key names can't contain, [\[], [\]], or start with a number.}
       {- It would be nice to be able to drop the dots in order
          to be compatible with {{:https://www.rfc-editor.org/rfc/rfc9535}
-         JSONPath} syntax.}} *)
+         JSONPath} syntax.}
+      {- Reintroduce and implement negative indices (they are parsed).}} *)
 end
 
 (** Sorts of JSON values. *)
