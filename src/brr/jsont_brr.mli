@@ -12,7 +12,8 @@
     The JSON functions use JavaScript's
     {{:https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse}[JSON.parse]} and
     {{:https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify}[JSON.stringify]} to convert to JavaScript values
-    which are then converted with {!decode_jv} and {!encode_jv}. *)
+    which are then converted with {!decode_jv} and {!encode_jv}. Parse
+    locations and layout preservation are unsupported. *)
 
 (** {1:decode Decode} *)
 

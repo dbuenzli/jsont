@@ -489,8 +489,7 @@ fun d map ->
         done;
         !b, !i
       with
-      | Jsont.Error e ->
-          Jsont.Error.adjust_context ~first_byte ~first_line e
+      | Jsont.Error e -> Jsont.Error.adjust_context ~first_byte ~first_line e
   in
   let textloc = textloc_to_current d ~first_byte ~first_line in
   let ws_after = nextc d; read_ws d; ws_pop d in
@@ -595,7 +594,7 @@ and decode_object_basic : type o p mems builder.
 =
 fun d map u umap mem_miss mem_decs dict -> match d.u with
 | 0x007D (* } *) ->
-    let meta = Jsont.Meta.none (* we add a correct one in decode_object *) in
+    let meta = d.meta_none (* we add a correct one in decode_object *) in
     Jsont.Repr.finish_object_decode map meta u umap mem_miss dict
 | 0x0022 ->
     let meta = read_json_name d in
@@ -639,11 +638,16 @@ and decode_object_case : type o cases tag.
   mem_dec String_map.t -> Jsont.object' -> Dict.t -> Dict.t
 =
 fun d map umems cases mem_miss mem_decs delay dict ->
-  let decode_case_tag map umems cases mem_miss mem_decs tag delay =
+  let decode_case_tag ~sep map umems cases mem_miss mem_decs nmeta tag delay =
     let eq_tag (Case c) = cases.tag_compare c.tag tag = 0 in
     match List.find_opt eq_tag cases.cases with
-    | None -> Jsont.Repr.unexpected_case_tag_error (error_meta d) map cases tag
+    | None ->
+        (try Jsont.Repr.unexpected_case_tag_error (error_meta d) map cases tag
+         with Jsont.Error e ->
+           Jsont.Repr.error_push_object
+             (error_meta d) map (cases.tag.name, nmeta) e)
     | Some (Case case) ->
+        if sep then read_json_mem_sep d;
         let dict =
           decode_object_map d case.object_map umems mem_miss mem_decs delay dict
         in
@@ -652,7 +656,9 @@ fun d map umems cases mem_miss mem_decs delay dict ->
   match d.u with
   | 0x007D (* } *) ->
       (match cases.tag.dec_absent with
-      | Some tag -> decode_case_tag map umems cases mem_miss mem_decs tag delay
+      | Some tag ->
+          decode_case_tag ~sep:false map umems cases mem_miss mem_decs
+           d.meta_none tag delay
       | None ->
           let fnd = (List.map (fun ((n, _), _) -> n) delay) in
           let exp = String_map.singleton cases.tag.name (Mem_dec cases.tag) in
@@ -665,8 +671,8 @@ fun d map umems cases mem_miss mem_decs delay dict ->
         | Jsont.Error e ->
             Jsont.Repr.error_push_object (error_meta d) map (name, meta) e
         in
-        read_json_mem_sep d;
-        decode_case_tag map umems cases mem_miss mem_decs tag delay
+        decode_case_tag
+          ~sep:true map umems cases mem_miss mem_decs meta tag delay
       else
       begin match String_map.find_opt name mem_decs with
       | Some (Mem_dec mem) ->

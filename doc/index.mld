@@ -13,18 +13,16 @@ provides:
 The descriptions are independent from the codec and can be used by
 third-party processors or codecs.
 
-See the {{!quick_start}quick start}.
-
 {1:manuals Manuals}
 
 The following manuals are available.
 
 {ul
-{- The {{!quick_start}quick start} should get you started.}
+{- The {{!quick_start}quick start} should do so.}
 {- The {{!cookbook}[Jsont] cookbook} has a few conventions and JSON
    data modelling recipes.}}
 
-The {{:https://github.com/dbuenzli/jsont/tree/master/test}test directory}
+The {{:https://erratique.ch/repos/jsont/tree/test}test directory}
 in the source repository of Jsont has a few more examples.
 
 {1:jsont Library [jsont]}
@@ -52,8 +50,7 @@ let data =
 {|
 { "task": "Make new release",
   "status": "todo",
-  "tags": ["work", "softwre"] }
-|}
+  "tags": ["work", "softwre"] }|}
 ]}
 
 First we can correct that typo in the ["tags"] list with:
@@ -63,7 +60,7 @@ let () =
   let p = Jsont.Path.(root |> mem "tags" |> nth 1) in
   let update = Jsont.(set_path string p "software") in
   let correct = Jsont_bytesrw.recode_string ~layout:true update data in
-  print_string (Result.get_ok correct)
+  print_endline (Result.get_ok correct)
 ]}
 
 Now to work with the data in OCaml without pain we can model it by:

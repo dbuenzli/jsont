@@ -48,14 +48,14 @@ JSON is utterly broken to interchange numbers reliably as the standard
 provides no constraints on their representation. Generally interopable
 implementations, in particular the most widely deployed and formally
 specified ECMAScript implementation, use IEEE 754 [binary64] values to
-represent finite JSON numbers and [null] values to represent on
+represent finite JSON numbers and [null] values to represent
 non-finite one. This has the following consequences.
 
 {2:integer_numbers Integer numbers}
 
 For representing integers by JSON numbers one is limited to the range
 \[-2{^53};2{^53}\] which are the only integers represented
-precisely in IEEE 754 [binary64]. If you want to represent numbers
+precisely in IEEE 754 [binary64]. If you want to serialize numbers
 beyond this range you need to represent them by a JSON string. These
 scheme can be seen in the wild:
 {ul
@@ -90,7 +90,7 @@ The {!Jsont.map} combinator is a general map over {!Jsont.t} types.
 It should rather be used to alter the representation of existing
 {!Jsont.t} values. For transforming base types it is better to use the
 base maps of {!Jsont.Base} as more context is made available to the
-functions notably when erroring.
+functions, notably when erroring.
 
 {2:transform_strings Transforming strings}
 

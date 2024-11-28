@@ -170,9 +170,13 @@ let allow_absent_opt =
   let doc = "Do not error if $(i,JSON_PATH) does not exist." in
   Arg.(value & flag & info ["a"; "allow-absent"] ~doc)
 
-let locs =
+let locs_default_false =
   let doc = "Keep track of source locations (improves error messages)." in
   Arg.(value & flag & info ["locs"] ~doc)
+
+let locs_default_true =
+  let doc = "Do not keep track of source locations." in
+  Term.(const ( not ) $ Arg.(value & flag & info ["no-locs"] ~doc))
 
 let number_format_opt =
   let doc = "Use C float format string $(docv) to format JSON numbers." in
@@ -235,7 +239,7 @@ let delete_cmd =
   and+ number_format = number_format_opt
   and+ diff = diff_flag
   and+ allow_absent = allow_absent_opt
-  and+ locs = locs in
+  and+ locs = locs_default_true in
   delete ~file ~path ~format ~number_format ~diff ~allow_absent ~locs
 
 let fmt_cmd =
@@ -253,7 +257,7 @@ let fmt_cmd =
   and+ format = format_opt_default_pretty
   and+ number_format = number_format_opt
   and+ diff = diff_flag
-  and+ locs = locs
+  and+ locs = locs_default_false
   and+ dec_only = dec_only in
   fmt ~file ~format ~number_format ~diff ~locs ~dec_only
 
@@ -287,7 +291,7 @@ let get_cmd =
   and+ number_format = number_format_opt
   and+ diff = diff_flag
   and+ absent = absent_opt
-  and+ locs = locs in
+  and+ locs = locs_default_true in
   get ~file ~path ~format ~number_format ~diff ~absent ~locs
 
 let set_cmd =
@@ -329,7 +333,7 @@ let set_cmd =
   and+ number_format = number_format_opt
   and+ diff = diff_flag
   and+ allow_absent = allow_absent_opt
-  and+ locs = locs in
+  and+ locs = locs_default_true in
   set ~file ~path ~format ~number_format ~diff ~allow_absent ~stub ~json ~locs
 
 let locs_cmd =

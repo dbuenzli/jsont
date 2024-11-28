@@ -11,8 +11,8 @@
     on {{!duplicate}duplicate members}.
 
     {b Tip.} For maximal performance decode with [~layout:false] and
-    [~locs:false], this is the default. Howver using [~locs:true] allows
-    for well located error reports. *)
+    [~locs:false], this is the default. Howver using [~locs:true] improves
+    some error reports. *)
 
 open Bytesrw
 

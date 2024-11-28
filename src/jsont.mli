@@ -5,9 +5,9 @@
 
 (** Types for JSON values.
 
-    This module provides a type for describing JSON values as a
-    bidirectional map between subset of JSON values and arbitrary
-    OCaml values. We call these values {e JSON types}.
+    This module provides a type for describing subsets of JSON values as
+    bidirectional maps with arbitrary OCaml values. We call these
+    values {e JSON types}.
 
     In these maps the {e decoding} direction maps from JSON values to
     OCaml values and the {e encoding} direction maps from OCaml values
@@ -210,7 +210,7 @@ module Meta : sig
 
   val make : ?ws_before:string -> ?ws_after:string -> Textloc.t -> t
   (** [make textloc ~ws_before ~ws_after] is metadata with text location
-      [textloc] whitespace [ws_before] before the node [ws_after] after
+      [textloc] whitespace [ws_before] before the node and [ws_after] after
       the node. Both default to [""]. *)
 
   val none : t
@@ -218,7 +218,7 @@ module Meta : sig
       is {!Textloc.none} and its whitespace is empty. *)
 
   val is_none : t -> bool
-  (** [is_non m] is [true] iff [m] is {!none}. *)
+  (** [is_none m] is [true] iff [m] is {!none}. *)
 
   val textloc : t -> Textloc.t
   (** [textloc m] is the text location of [m]. *)
@@ -239,7 +239,7 @@ module Meta : sig
   (** [clear_textloc m] is [m] with {!textloc} set to {!Textloc.none}. *)
 
   val copy_ws : t -> dst:t -> t
-  (** [copy_ws src dst] copies {!ws_before} and {!ws_after} of [src]
+  (** [copy_ws src ~dst] copies {!ws_before} and {!ws_after} of [src]
       to [dst]. *)
 end
 
@@ -250,7 +250,7 @@ type 'a node = 'a * Meta.t
 (** JSON paths.
 
     Paths are used for keeping track of erroring
-    {{!Error.Context.t}contexts} and for specifying {{:Jsont.query}
+    {{!Error.Context.t}contexts} and for specifying {{!Jsont.queries}
     query and update}
     locations. *)
 module Path : sig
@@ -305,7 +305,7 @@ module Path : sig
 
       A {e path} is a sequence of member and list indexing
       operations. Applying the path to a JSON value leads to either a
-      JSON value or nothing if one of the indices does not exist, or
+      JSON value, or nothing if one of the indices does not exist, or
       an error if ones tries to index a non-indexable value.
 
       Here are a few examples of paths.
@@ -323,11 +323,10 @@ module Path : sig
       ocaml.libs.[0]    # first element of member "libs" of member "ocaml"
       ]}
 
-      More formally a {e path} is a [.] seperated list of indices.
-
-      An {e index} is written [[i]]. [i] can a zero-based list
-      index. Or [i] can be an object member name [n]. If there is no
-      ambiguity, the surrounding brackets can be dropped.
+      More formally a {e path} is a [.] seperated list of indices. An
+      {e index} is written [[i]]. [i] can a zero-based list index. Or
+      [i] can be an object member name [n]. If there is no ambiguity,
+      the surrounding brackets can be dropped.
 
       {b Notes.}
       {ul
@@ -351,7 +350,7 @@ module Sort : sig
   (** The type for sorts of JSON values. *)
 
   val to_string : t -> string
-  (** [to_string s] is a string for sort [s]. *)
+  (** [to_string sort] is a string for sort [sort]. *)
 
   val pp : Format.formatter -> t -> unit
   (** [pp] formats sorts. *)
@@ -361,12 +360,12 @@ module Sort : sig
       For formatting error messages. *)
 
   val or_kind : kind:string -> t -> string
-  (** [or_kind ~kind s] is [to_string s] if [kind] is [""] and
+  (** [or_kind ~kind sort] is [to_string sort] if [kind] is [""] and
       [kind] otherwise. *)
 
   val kinded : kind:string -> t -> string
-  (** [kinded ~kind s] is [to_string s] if [kind] is [""]
-      and [String.concat " " [kind; to_string s]] otherwise. *)
+  (** [kinded ~kind sort] is [to_string sort] if [kind] is [""]
+      and [String.concat " " [kind; to_string sort]] otherwise. *)
 
   val kinded' : kind:string -> string -> string
   (** [kinded' ~kind sort] is [sort] if [kind] is [""]
@@ -391,7 +390,7 @@ module Error : sig
 
     type index = string node * Path.index
     (** The type for context indices. The {{!Jsont.kinded_sort}kinded sort} of
-        an array or object its index. *)
+        an array or object and its index. *)
 
     type t = index list
     (** The type for erroring contexts. The first element indexes the
@@ -429,7 +428,7 @@ module Error : sig
 
   val push_array : string node -> int node -> t -> 'a
   (** [push_array kinded_sort n e] contextualises [e] as an error in the
-      [n]th element of an array {{!Jsont.kinded_sort}kinded sort}
+      [n]th element of an array of {{!Jsont.kinded_sort}kinded sort}
       [kinded_sort]. *)
 
   val push_object : string node -> string node -> t -> 'a
@@ -851,7 +850,8 @@ val array_as_string_map :
   'a Map.Make(String).t t
 (** [array_as_string_map ~key t] maps JSON array elements of type [t] to
     string maps by indexing them with [key]. If two elements have
-    the same [key] the element with the greatest index takes over. *)
+    the same [key] the element with the greatest index takes over.
+    Elements of the map are encoded to a JSON array in (binary) key order. *)
 
 val bigarray :
   ?kind:string -> ?doc:string -> ('a, 'b) Bigarray.kind -> 'a t ->

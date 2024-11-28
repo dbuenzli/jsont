@@ -6,17 +6,15 @@
 (* Examples from the docs *)
 
 let data =
-{json|
-{ "task": "Make new release",
-  "status": "todo",
-  "tags": ["work", "softwre"] }
-|json}
+{|{ "task": "Make new release",
+    "status": "todo",
+    "tags": ["work", "softwre"] }|}
 
 let () =
   let p = Jsont.Path.(root |> mem "tags" |> nth 1) in
-  let upd = Jsont.(set_path string p "software") in
-  let correct = Jsont_bytesrw.recode_string ~layout:true upd data in
-  print_string (Result.get_ok correct)
+  let update = Jsont.(set_path string p "software") in
+  let correct = Jsont_bytesrw.recode_string ~layout:true update data in
+  print_endline (Result.get_ok correct)
 
 module Status = struct
   type t = Todo | Done | Cancelled
