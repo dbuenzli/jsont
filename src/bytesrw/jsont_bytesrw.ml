@@ -507,6 +507,14 @@ fun d map ->
         d map (Unknown_mems None) String_map.empty String_map.empty []
         Dict.empty
     with
+    | Jsont.Error (ctx, meta, k) when Jsont.Error.Context.is_empty ctx ->
+        let meta =
+          (* This is for when Jsont.Repr.finish_object_decode raises. *)
+          if Jsont.Textloc.is_none (Jsont.Meta.textloc meta)
+          then error_meta_to_current d ~first_byte ~first_line
+          else meta
+        in
+        Jsont.Error.raise ctx meta k
     | Jsont.Error e -> Jsont.Error.adjust_context ~first_byte ~first_line e
   in
   let textloc = textloc_to_current d ~first_byte ~first_line in

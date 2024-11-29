@@ -61,9 +61,9 @@ module Error = struct
   type t = error
 
   let make_msg ctx meta msg = ctx, meta, msg
+  let raise ctx meta msg = raise_notrace (Error (ctx, meta, msg))
   let msg meta msg = raise_notrace (Error (Context.empty, meta, msg))
   let msgf meta fmt = Format.kasprintf (fun m -> msg meta m) fmt
-
   let push_array kinded_sort n (ctx, meta, e) =
     raise_notrace (Error (Context.push_array kinded_sort n ctx, meta, e))
 
@@ -73,7 +73,7 @@ module Error = struct
   let adjust_context ~first_byte ~first_line (ctx, meta, e) = match ctx with
   | [] -> raise_notrace (Error (ctx, meta, e))
   | ((sort, smeta), idx) :: is ->
-      let textloc = Meta.textloc meta in
+      let textloc = Meta.textloc smeta in
       let textloc =
         if Textloc.is_none textloc then textloc else
         Textloc.set_first textloc ~first_byte ~first_line

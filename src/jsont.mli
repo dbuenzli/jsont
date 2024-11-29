@@ -415,6 +415,9 @@ module Error : sig
   (** The type for errors. The context, the error localisation and the
       kind of error. *)
 
+  val raise : Context.t -> Meta.t -> kind -> 'a
+  (** [raise ctx meta k] raises an error with given paramters. *)
+
   val make_msg : Context.t -> Meta.t -> string -> t
   (** [make_msg ctx meta msg] is an error with message [msg] for meta [meta]
       in context [ctx]. *)
