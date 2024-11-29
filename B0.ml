@@ -217,9 +217,10 @@ let default =
                   "--with-cmdliner" "%{cmdliner:installed}%"
                   "--with-bytesrw" "%{bytesrw:installed}%"
                   "--with-brr" "%{brr:installed}%"]]|}
-   |> ~~ B0_opam.depopts ["cmdliner", "";]
-   |> ~~ B0_opam.depopts ["brr", "";]
-   |> ~~ B0_opam.depopts ["bytesrw", "";]
+   |> ~~ B0_opam.depopts
+     ["cmdliner", "";
+      "brr", "";
+      "bytesrw", ""]
    |> ~~ B0_opam.conflicts [ "cmdliner", {|< "1.3.0"|};
                              "brr", {|< "0.0.6"|}; ]
    |> ~~ B0_opam.depends
