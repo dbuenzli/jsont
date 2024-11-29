@@ -96,6 +96,7 @@ module Textloc : sig
     first_line:line_pos -> last_line:line_pos -> t
 
   val file : t -> fpath
+  val set_file : t -> fpath -> t
   val first_byte : t -> byte_pos
   val last_byte : t -> byte_pos
   val first_line : t -> line_pos

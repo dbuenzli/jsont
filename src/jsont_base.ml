@@ -345,6 +345,7 @@ module Textloc = struct
     { file; first_byte; last_byte; first_line; last_line }
 
   let file l = l.file
+  let set_file l file = { l with file }
   let first_byte l = l.first_byte
   let last_byte l = l.last_byte
   let first_line l = l.first_line

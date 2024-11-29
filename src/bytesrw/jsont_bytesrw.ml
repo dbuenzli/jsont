@@ -50,6 +50,7 @@ let pp_quchar ppf u =
 
 type decoder =
   { file : string;
+    meta_none : Jsont.Meta.t; (* A meta with just [file] therein. *)
     locs : bool; (* [true] if text locations should be computed. *)
     layout : bool; (* [true] if text layout should be kept. *)
     reader : Bytes.Reader.t; (* The source of bytes. *)
@@ -67,7 +68,9 @@ type decoder =
 let make_decoder ?(locs = false) ?(layout = false) ?(file = "-") reader =
   let overlap = Stdlib.Bytes.create uchar_max_utf_8_byte_length in
   let token = Buffer.create 255 and ws = Buffer.create 255 in
-  { file; locs; layout; reader; i = overlap (* overwritten by initial refill *);
+  let meta_none = Jsont.Meta.make (Jsont.Textloc.(set_file none) file) in
+  { file; meta_none; locs; layout; reader;
+    i = overlap (* overwritten by initial refill *);
     i_max = 0; i_next = 1 (* triggers an initial refill *);
     overlap; u = sot; byte_count = 0; line = 1; line_start = 0; token; ws }
 
@@ -254,7 +257,6 @@ let rec nextc d =
       d.i_next <- d.i_next + ulen; d.byte_count <- d.byte_count + ulen;
       u
 
-
 (* Decoder tokenizer *)
 
 let[@inline] token_clear d = Buffer.clear d.token
@@ -291,7 +293,7 @@ let textloc_prev_ascii_char ~first_byte ~first_line d =
   Jsont.Textloc.make ~file:d.file ~first_byte ~last_byte ~first_line ~last_line
 
 let meta_make d ?ws_before ?ws_after textloc =
-  if not d.locs && not d.layout then Jsont.Meta.none else
+  if not d.locs && not d.layout then d.meta_none else
   Jsont.Meta.make ?ws_before ?ws_after textloc
 
 (* Decoding *)

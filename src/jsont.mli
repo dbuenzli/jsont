@@ -108,6 +108,9 @@ module Textloc : sig
   val file : t -> fpath
   (** [file l] is [l]'s file. *)
 
+  val set_file : t -> fpath -> t
+  (** [set_file l file] is [l] with {!file} set to [file]. *)
+
   val first_byte : t -> byte_pos
   (** [first_byte l] is [l]'s first byte. Irrelevant if {!is_none} is
       [true]. *)
