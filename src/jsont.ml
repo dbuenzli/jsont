@@ -74,7 +74,10 @@ module Error = struct
   | [] -> raise_notrace (Error (ctx, meta, e))
   | ((sort, smeta), idx) :: is ->
       let textloc = Meta.textloc meta in
-      let textloc = Textloc.set_first textloc ~first_byte ~first_line in
+      let textloc =
+        if Textloc.is_none textloc then textloc else
+        Textloc.set_first textloc ~first_byte ~first_line
+      in
       let smeta = Meta.with_textloc smeta textloc in
       let ctx = ((sort, smeta), idx) :: is in
       raise_notrace (Error (ctx, meta, e))

@@ -76,8 +76,8 @@ let make_decoder ?(locs = false) ?(layout = false) ?(file = "-") reader =
 let[@inline] get_line_pos d = d.line, d.line_start
 
 let get_last_byte d =
-  if d.u <= 0x7F || d.u = eot then d.byte_count - 1 else
-  if d.u = sot then 0 else
+  if d.u <= 0x7F then d.byte_count - 1 else
+  if d.u = sot || d.u = eot then d.byte_count else
   (* On multi-bytes uchars we want to point on the first byte. *)
   d.byte_count - Uchar.utf_8_byte_length (Uchar.of_int d.u)
 
@@ -481,7 +481,7 @@ fun d map ->
           incr i;
           match (read_ws d; d.u) with
           | 0x005D (* ] *) -> next := false
-          | 0x002C (* , *) -> nextc d
+          | 0x002C (* , *) -> nextc d; read_ws d
           | u when u = eot -> err_unclosed_array d
           | fnd -> err_exp_comma_or_eoa d ~fnd
         done;
