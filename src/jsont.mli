@@ -1663,10 +1663,10 @@ module Repr : sig
     end
   end
 
-  type ('ret, 'f) dec_fun =
-  | Dec_fun : 'f -> ('ret, 'f) dec_fun
-    (** The function and its return type. *)
-  | Dec_app : ('ret, 'a -> 'b) dec_fun * 'a Type.Id.t -> ('ret, 'b) dec_fun
+  type 'f dec_fun =
+  | Dec_fun : 'f -> 'f dec_fun
+    (** The function. *)
+  | Dec_app : ('a -> 'b) dec_fun * 'a Type.Id.t -> 'b dec_fun
     (** Application of an argument to a function witnessed by a type
         identifier. The type identifier can be used to lookup a value
         of the right type in an heterogenous dictionary. *)
@@ -1741,8 +1741,8 @@ module Repr : sig
     (** The kind of JSON object (documentation). *)
     doc : string;
     (** A doc string for the JSON member. *)
-    dec : ('o, 'dec) dec_fun;
-    (** The object decoding function to construct an ['o] value. *)
+    dec : 'dec dec_fun;
+    (** The object decoding function to construct a ['dec] value. *)
     mem_decs : mem_dec String_map.t;
     (** [mem_decs] are the member decoders sorted by member name. *)
     mem_encs : 'o mem_enc list;
@@ -2006,7 +2006,7 @@ module Repr : sig
     val find : 'a Type.Id.t -> t -> 'a option
   end
 
-  val apply_dict : ('ret, 'f) dec_fun -> Dict.t -> 'f
+  val apply_dict : 'f dec_fun -> Dict.t -> 'f
   (** [apply_dict dec dict] applies [dict] to [f] in order to get the
       value ['f]. Raises [Invalid_argument] if [dict] has not all the
       type identifiers that [dec] needs. *)
