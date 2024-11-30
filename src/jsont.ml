@@ -163,9 +163,9 @@ module Repr = struct (* See the .mli for documentation *)
   module String_map = Map.Make (String)
   module Type = Jsont_base.Type
 
-  type ('ret, 'f) dec_fun =
-  | Dec_fun : 'f -> ('ret, 'f) dec_fun
-  | Dec_app : ('ret, 'a -> 'b) dec_fun * 'a Type.Id.t -> ('ret, 'b) dec_fun
+  type 'f dec_fun =
+  | Dec_fun : 'f -> 'f dec_fun
+  | Dec_app : ('a -> 'b) dec_fun * 'a Type.Id.t -> 'b dec_fun
 
   type ('a, 'b) base_map =
   { kind : string;
@@ -199,7 +199,7 @@ module Repr = struct (* See the .mli for documentation *)
   and ('o, 'dec) object_map =
   { kind : string;
     doc : string;
-    dec : ('o, 'dec) dec_fun;
+    dec : 'dec dec_fun;
     mem_decs : mem_dec String_map.t;
     mem_encs : 'o mem_enc list;
     enc_meta : 'o -> Meta.t;
@@ -400,7 +400,7 @@ module Repr = struct (* See the .mli for documentation *)
         | Some Type.Equal -> Some v | None -> assert false
   end
 
-  let rec apply_dict : type ret f. (ret, f) dec_fun -> Dict.t -> f =
+  let rec apply_dict : type f. f dec_fun -> Dict.t -> f =
   fun dec dict -> match dec with
   | Dec_fun f -> f
   | Dec_app (f, arg) -> (apply_dict f dict) (Option.get (Dict.find arg dict))
