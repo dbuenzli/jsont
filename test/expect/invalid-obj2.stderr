@@ -1,2 +1,2 @@
-jsont: [01;31mError[m: Expected [1mobject member[0m but found [1m}[0m
+jsont: [31;1mError[0m: Expected [1mobject member[0m but found [1m}[0m
               File "invalid-obj2.json", line 1, characters 12-13:

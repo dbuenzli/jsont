@@ -1,2 +1,2 @@
-jsont: [01;31mError[m: Expected [1me[0m while parsing [1mtrue[0m but found: [1mU+000A[0m
+jsont: [31;1mError[0m: Expected [1me[0m while parsing [1mtrue[0m but found: [1mU+000A[0m
               File "invalid-bool0.json", lines 3-4, characters 2-0:

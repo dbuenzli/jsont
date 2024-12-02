@@ -1,2 +1,2 @@
-jsont: [01;31mError[m: Expected [1m,[0m or [1m][0m after [1marray element[0m but found [1m4[0m
+jsont: [31;1mError[0m: Expected [1m,[0m or [1m][0m after [1marray element[0m but found [1m4[0m
               File "invalid-array1.json", line 1, characters 11-12:

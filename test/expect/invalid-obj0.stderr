@@ -1,4 +1,4 @@
-jsont: [01;31mError[m: Expected [1mJSON value[0m but found [1m}[0m
+jsont: [31;1mError[0m: Expected [1mJSON value[0m but found [1m}[0m
               File "invalid-obj0.json", line 1, characters 9-10:
               File "invalid-obj0.json": in member [1mbla[0m of
               File "invalid-obj0.json", line 1, characters 0-10: [1mobject[0m

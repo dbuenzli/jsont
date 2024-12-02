@@ -21,17 +21,19 @@ let jsont_lib =
 
 let jsont_bytesrw_lib =
   let srcs = [ `Dir ~/"src/bytesrw" ] in
-  B0_ocaml.lib jsont_bytesrw ~srcs ~requires:[bytesrw; jsont] ~exports:[jsont]
+  let requires = [bytesrw; jsont] in
+  B0_ocaml.lib jsont_bytesrw ~srcs ~requires ~exports:requires
 
 let jsont_brr_lib =
   let srcs = [ `Dir ~/"src/brr" ] in
-  B0_ocaml.lib jsont_brr ~srcs ~requires:[brr; jsont] ~exports:[jsont]
+  let requires = [brr; jsont] in
+  B0_ocaml.lib jsont_brr ~srcs ~requires ~exports:requires
 
 (* Tools *)
 
 let jsont_tool =
   let srcs = [ `File ~/"test/jsont_tool.ml" ] in
-  let requires = [cmdliner; b0_std; bytesrw; jsont_bytesrw; jsont; ] in
+  let requires = [cmdliner; bytesrw; jsont_bytesrw; jsont] in
   B0_ocaml.exe "jsont" ~public:true ~doc:"The jsont tool" ~srcs ~requires
 
 (* Tests *)

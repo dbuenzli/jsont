@@ -3,36 +3,79 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-open B0_std
-open Result.Syntax
+let ( let* ) = Result.bind
+
+let strf = Format.asprintf
+let log_if_error ~use = function
+| Ok v -> v
+| Error e ->
+    let exec = Filename.basename Sys.executable_name in
+    let lines = String.split_on_char '\n' e in
+    Format.eprintf "%s: %a @[<v>%a@]@."
+      exec Jsont.Error.puterr () Format.(pp_print_list pp_print_string) lines;
+    use
 
 let exit_err_file = 1
 let exit_err_json = 2
 let exit_err_diff = 3
 
-let diff src fmted =
-  Result.join @@ Os.Dir.with_tmp @@ fun cwd ->
-  let null = Fpath.(to_string null) in
-  let* env =
-    let* env = Os.Env.current () in
-    let env = Os.Env.add "GIT_CONFIG_SYSTEM" null env in
-    let env = Os.Env.add "GIT_CONFIG_GLOBAL" null env in
-    Ok (Os.Env.to_assignments env)
-  in
-  let* git = Os.Cmd.get (Cmd.tool "git") in
-  let src_file = Fpath.v "src" and fmted_file = Fpath.v "fmt" in
-  let cmd =
-    Cmd.(git % "diff" % "--ws-error-highlight=all" % "--no-index" %
-         "--patience" %% path src_file %% path fmted_file)
-  in
-  let force = false and make_path = true in
-  let* () = Os.File.write ~force ~make_path Fpath.(cwd // src_file) src in
-  let* () = Os.File.write ~force ~make_path Fpath.(cwd // fmted_file) fmted in
-  let* status = Os.Cmd.run_status ~env ~cwd cmd in
-  match status with
-  | `Exited n -> Ok n
-  | `Signaled _ -> Fmt.error "%a" Os.Cmd.pp_cmd_status (cmd, status)
+module Os = struct
 
+  (* Emulate B0_std.Os functionality to eschew the dep.
+     Note: this is only used for the [diff] function. *)
+
+  let read_file file =
+    try
+      let ic = if file = "-" then stdin else open_in_bin file in
+      let finally () = if file = "-" then () else close_in_noerr ic in
+      Fun.protect ~finally @@ fun () -> Ok (In_channel.input_all ic)
+    with
+    | Sys_error err -> Error err
+
+  let write_file file s =
+    try
+      let oc = if file = "-" then stdout else open_out_bin file in
+      let finally () = if file = "-" then () else close_out_noerr oc in
+      Fun.protect ~finally @@ fun () -> Ok (Out_channel.output_string oc s)
+    with
+    | Sys_error err -> Error err
+
+  let with_tmp_dir f =
+    try
+      let tmpdir =
+        let file = Filename.temp_file "cmarkit" "dir" in
+        (Sys.remove file; Sys.mkdir file 0o700; file)
+      in
+      let finally () = try Sys.rmdir tmpdir with Sys_error _ -> () in
+      Fun.protect ~finally @@ fun () -> Ok (f tmpdir)
+    with
+    | Sys_error err -> Error ("Making temporary dir: " ^ err)
+
+  let with_cwd cwd f =
+    try
+      let curr = Sys.getcwd () in
+      let () = Sys.chdir cwd in
+      let finally () = try Sys.chdir curr with Sys_error _ -> () in
+      Fun.protect ~finally @@ fun () -> Ok (f ())
+    with
+    | Sys_error err -> Error ("With cwd: " ^ err)
+end
+
+let diff src fmted =
+  let env = ["GIT_CONFIG_SYSTEM=/dev/null"; "GIT_CONFIG_GLOBAL=/dev/null"; ] in
+  let set_env = match Sys.win32 with
+  | true -> String.concat "" (List.map (fun e -> "set " ^ e ^ " && ") env)
+  | false -> String.concat " " env
+  in
+  let diff = "git diff --ws-error-highlight=all --no-index --patience " in
+  let src_file = "src" and fmted_file = "fmt" in
+  let cmd = String.concat " " [set_env; diff; src_file; fmted_file] in
+  Result.join @@ Result.join @@ Os.with_tmp_dir @@ fun dir ->
+  Os.with_cwd dir @@ fun () ->
+  let* () = Os.write_file src_file src in
+  let* () = Os.write_file fmted_file fmted in
+  Ok (Sys.command cmd)
+        
 let with_infile file f = (* XXX add something to bytesrw. *)
   let process file ic = try Ok (f (Bytesrw.Bytes.Reader.of_in_channel ic)) with
   | Sys_error e -> Error (Format.sprintf "@[<v>%s:@,%s@]" file e)
@@ -49,16 +92,16 @@ let output ~format ~number_format j = match format with
     Jsont_bytesrw.encode ~format ~number_format ~eod:true Jsont.json j w
 
 let output_string ~format ~number_format j = match format with
-| `Pretty -> Ok (Fmt.str "@[%a@]" (Jsont.pp_json' ~number_format ()) j)
+| `Pretty -> Ok (Format.asprintf "@[%a@]" (Jsont.pp_json' ~number_format ()) j)
 | `Format format ->
     Jsont_bytesrw.encode_string ~format ~number_format Jsont.json j
 
 let trip_type
     ?(dec_only = false) ~file ~format ~number_format ~diff:do_diff ~locs t
   =
-  Log.if_error ~use:exit_err_file @@
+  log_if_error ~use:exit_err_file @@
   with_infile file @@ fun r ->
-  Log.if_error ~use:exit_err_json @@
+  log_if_error ~use:exit_err_json @@
   let layout = format = `Format Jsont.Layout in
   match do_diff with
   | false ->
@@ -72,7 +115,7 @@ let trip_type
       let* fmted = output_string ~format ~number_format j in
       (match diff src fmted with
       | Ok exit -> if exit = 0 then Ok 0 else Ok exit_err_diff
-      | Error e -> Log.err (fun m -> m "%s" e); Ok Cmdliner.Cmd.Exit.some_error)
+      | Error e -> Format.eprintf "%s" e; Ok Cmdliner.Cmd.Exit.some_error)
 
 let delete ~file ~path ~format ~number_format ~diff ~allow_absent ~locs =
   let del = Jsont.delete_path ~allow_absent path in
@@ -86,39 +129,41 @@ let get ~file ~path ~format ~number_format ~diff ~absent ~locs =
   trip_type ~file ~format ~number_format ~diff ~locs get
 
 let locs' ~file =
+  let pf = Format.fprintf in
+  let pp_code = Jsont.Repr.pp_code in
   let pp_locs_outline ppf v =
     let indent = 2 in
     let loc label ppf m =
-      Fmt.pf ppf "@[<v>%s:@,%a@]@,"
+      pf ppf "@[<v>%s:@,%a@]@,"
         label Jsont.Textloc.pp_ocaml (Jsont.Meta.textloc m)
     in
     let rec value ppf = function
     | Jsont.Null ((), m) ->
-        loc (Fmt.str "%a" Fmt.(code' Jsont.pp_null) ()) ppf m
+        loc (strf "%a" pp_code (strf "%a" Jsont.pp_null ())) ppf m
     | Jsont.Bool (b, m) ->
-        loc (Fmt.str "Bool %a" Fmt.(code' bool) b) ppf m
+        loc (strf "Bool %a" pp_code (strf "%a" Jsont.pp_bool b)) ppf m
     | Jsont.Number (n, m) ->
-        loc (Fmt.str "Number %a" Fmt.(code' Jsont.pp_number) n) ppf m
+        loc (strf "Number %a" pp_code (strf "%a" Jsont.pp_number n)) ppf m
     | Jsont.String (s, m) ->
-      loc (Fmt.str "String %a" (Fmt.code' Fmt.text_string_literal) s) ppf m
+        loc (strf "String %a" pp_code  (strf "%a" Jsont.pp_string s)) ppf m
     | Jsont.Array (l, m) ->
         Format.pp_open_vbox ppf indent;
-        loc "Array" ppf m; (Fmt.list value) ppf l;
+        loc "Array" ppf m; (Format.pp_print_list value) ppf l;
         Format.pp_close_box ppf ()
     | Jsont.Object (o, m) ->
       let mem ppf ((name, m), v) =
-        let l = Fmt.str "Member %a" (Fmt.code' Fmt.text_string_literal) name in
+        let l = strf "Member %a" pp_code (strf "%a" Jsont.pp_string name) in
         loc l ppf m; value ppf v;
       in
       Format.pp_open_vbox ppf indent;
-      loc "Object" ppf m; (Fmt.list mem) ppf o;
+      loc "Object" ppf m; (Format.pp_print_list mem) ppf o;
       Format.pp_close_box ppf ()
     in
     value ppf v
   in
-  Log.if_error ~use:exit_err_file @@
+  log_if_error ~use:exit_err_file @@
   with_infile file @@ fun reader ->
-  Log.if_error ~use:exit_err_json @@
+  log_if_error ~use:exit_err_json @@
   let* j = Jsont_bytesrw.decode ~file ~locs:true Jsont.json reader in
   pp_locs_outline Format.std_formatter j;
   Ok 0
@@ -156,9 +201,9 @@ let format_opt ~default =
       "pretty", `Pretty ]
   in
   let doc =
-    Fmt.str "Output style. Must be %s. $(b,minify) guarantess there is \
-             no CR (U+000D) or LF (U+000A) in the output. $(b,pretty) is \
-             similar to $(b,indent) but may yield more compact outputs."
+    strf "Output style. Must be %s. $(b,minify) guarantess there is \
+         no CR (U+000D) or LF (U+000A) in the output. $(b,pretty) is \
+         similar to $(b,indent) but may yield more compact outputs."
       (Arg.doc_alts_enum fmt)
   in
   Arg.(value & opt (enum fmt) default & info ["f"; "format"] ~doc ~docv:"FMT")
@@ -184,7 +229,7 @@ let number_format_opt =
     let parse s =
       try Ok (Scanf.format_from_string s Jsont.default_number_format) with
       | Scanf.Scan_failure _ ->
-          Error (Fmt.str "Cannot format a float with %S" s)
+          Error (strf "Cannot format a float with %S" s)
     in
     let pp ppf fmt = Format.pp_print_string ppf (string_of_format fmt) in
     Arg.conv' (parse, pp)
