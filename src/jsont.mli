@@ -1716,8 +1716,10 @@ module Repr : sig
   type 'f dec_fun =
   | Dec_fun : 'f -> 'f dec_fun
     (** The function. *)
-  | Dec_app : ('a -> 'b) dec_fun * 'a Type.Id.t -> 'b dec_fun
-    (** Application of an argument to a function witnessed by a type
+  | Dec_app : ('a -> 'b) dec_fun * 'a dec_fun -> 'b dec_fun
+    (** Application of an argument to a function. *)
+  | Dec_arg : 'a Type.Id.t -> 'a dec_fun
+    (** An argument for a function witnessed by a type
         identifier. The type identifier can be used to lookup a value
         of the right type in an heterogenous dictionary. *)
   (** The type for decoding functions. *)

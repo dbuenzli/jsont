@@ -165,7 +165,8 @@ module Repr = struct (* See the .mli for documentation *)
 
   type 'f dec_fun =
   | Dec_fun : 'f -> 'f dec_fun
-  | Dec_app : ('a -> 'b) dec_fun * 'a Type.Id.t -> 'b dec_fun
+  | Dec_app : ('a -> 'b) dec_fun * 'a dec_fun -> 'b dec_fun
+  | Dec_arg : 'a Type.Id.t -> 'a dec_fun
 
   type ('a, 'b) base_map =
   { kind : string;
@@ -403,7 +404,8 @@ module Repr = struct (* See the .mli for documentation *)
   let rec apply_dict : type f. f dec_fun -> Dict.t -> f =
   fun dec dict -> match dec with
   | Dec_fun f -> f
-  | Dec_app (f, arg) -> (apply_dict f dict) (Option.get (Dict.find arg dict))
+  | Dec_app (f, arg) -> apply_dict f dict (apply_dict arg dict)
+  | Dec_arg arg -> Option.get (Dict.find arg dict)
 
   type unknown_mems_option =
   | Unknown_mems :
@@ -986,7 +988,7 @@ module Object = struct
 
   let map ?kind ?doc dec = _map ?kind ?doc (Dec_fun dec)
   let map' ?kind ?doc ?enc_meta dec =
-    _map ?kind ?doc ?enc_meta (Dec_app (Dec_fun dec, object_meta_arg))
+    _map ?kind ?doc ?enc_meta (Dec_app (Dec_fun dec, Dec_arg object_meta_arg))
 
   let enc_only ?(kind = "") ?doc ?enc_meta () =
     let dec meta = Error.no_decoder meta ~kind:(Sort.kinded ~kind Object) in
@@ -1042,7 +1044,7 @@ module Object = struct
     let app object_map mm =
       let mem_decs = String_map.add mm.name (Mem_dec mm) object_map.mem_decs in
       let mem_encs = Mem_enc mm :: object_map.mem_encs in
-      let dec = Dec_app (object_map.dec, mm.id) in
+      let dec = Dec_app (object_map.dec, Dec_arg mm.id) in
       { object_map with dec; mem_decs; mem_encs }
   end
 
@@ -1050,7 +1052,7 @@ module Object = struct
     let mmap =  Mem.map ~doc ?dec_absent ?enc ?enc_omit name type' in
     let mem_decs = String_map.add name (Mem_dec mmap) map.mem_decs in
     let mem_encs = Mem_enc mmap :: map.mem_encs in
-    let dec = Dec_app (map.dec, mmap.id) in
+    let dec = Dec_app (map.dec, Dec_arg mmap.id) in
     { map with dec; mem_decs; mem_encs }
 
   let opt_mem ?doc ?enc:e name dom map =
@@ -1059,65 +1061,43 @@ module Object = struct
     mem ?doc ~dec_absent:None ?enc:e ~enc_omit:Option.is_none name some map
 
   module Syntax = struct
-    type ('o, 'a, 'fn, 'res) mmaps =
-      | Mem : ('o, 'a) Mem.map -> ('o, 'a, 'a -> 'res, 'res) mmaps
-      | And : ('o, 'a, 'fn, 'gn) mmaps * ('o, 'b, 'gn, 'res) mmaps
-              -> ('o, 'a * 'b, 'fn, 'res) mmaps
-
-    type ('o, 'a, 'res) mmaps_ =
-      Exist : ('o, 'a, _, 'res) mmaps -> ('o, 'a, 'res) mmaps_
-
     type ('o, 'a) schema =
-      Schema : { mmaps: 'res. ('o, 'b, 'res) mmaps_; extract: 'b -> 'a }
-               -> ('o, 'a) schema
+      | Ret : 'a -> ('o, 'a) schema
+      | Mem : ('o, 'a) Mem.map -> ('o, 'a) schema
+      | App : ('o, 'a -> 'b) schema * ('o, 'a) schema -> ('o, 'b) schema
 
     let mem ?(doc = "") ?dec_absent ?enc ?enc_omit name type' =
-      let mmap = Mem.map ~doc ?dec_absent ?enc ?enc_omit name type' in
-      Schema { mmaps = Exist (Mem mmap); extract = Fun.id }
+      Mem (Mem.map ~doc ?dec_absent ?enc ?enc_omit name type')
 
     let opt_mem ?doc ?enc name type' =
       mem ?doc ~dec_absent:None ~enc_omit:Option.is_none name (some type')
 
-    let ( let+ ) (Schema { mmaps; extract }) f =
-      Schema { mmaps ; extract = fun x -> f (extract x) }
+    let ( let+ ) schema f = App (Ret f, schema)
 
-    let ( and+ ) (Schema a) (Schema b) =
-      let mmaps =
-        let Exist b = b.mmaps in
-        let Exist a = a.mmaps in
-        Exist (And (a, b))
-      in
-      Schema { mmaps; extract = fun (x, y) -> a.extract x, b.extract y }
-
-    let rec to_fn :
-      type o a fn res. (o, a, fn, res) mmaps -> (a -> res) -> fn
-    = fun mmaps k ->
-      match mmaps with
-      | Mem _ -> k
-      | And (a, b) -> to_fn a (fun a -> to_fn b (fun b -> k (a, b)))
+    let ( and+ ) a b = App (App (Ret (fun a b -> a, b), a), b)
 
     let rec to_dec_fun :
-      type o a fn res. (o, a, fn, res) mmaps -> fn dec_fun -> res dec_fun
-    = fun mmaps fn ->
-      match mmaps with
-      | Mem mmap -> Dec_app (fn, mmap.id)
-      | And (a, b) -> to_dec_fun b (to_dec_fun a fn)
+      type o a fn res. (o, a) schema -> a dec_fun
+    = function
+      | Ret x -> Dec_fun x
+      | Mem mmap -> Dec_arg mmap.id
+      | App (a, b) -> Dec_app (to_dec_fun a, to_dec_fun b)
 
     let rec load :
-      type o a fn res. (o, a, fn, res) mmaps -> (o, o) map -> (o, o) map
+      type o a fn res. (o, a) schema -> (o, o) map -> (o, o) map
     = fun mmaps map ->
       match mmaps with
+      | Ret _ -> map
       | Mem mmap ->
           let mem_decs = String_map.add mmap.name (Mem_dec mmap) map.mem_decs in
           let mem_encs = Mem_enc mmap :: map.mem_encs in
           { map with mem_decs; mem_encs }
-      | And (a, b) ->
+      | App (a, b) ->
           load a (load b map)
 
-    let define ?kind ?doc (Schema { mmaps = Exist mmaps; extract }) =
-      let fn = to_fn mmaps extract in
-      let dec = to_dec_fun mmaps (Dec_fun fn) in
-      let map = load mmaps (_map ?kind ?doc dec) in
+    let define ?kind ?doc schema =
+      let dec = to_dec_fun schema in
+      let map = load schema (_map ?kind ?doc dec) in
       finish map
   end
 
@@ -1174,7 +1154,7 @@ module Object = struct
     in
     let id = Type.Id.make () in
     let cases = {tag; tag_compare; tag_to_string; id; cases; enc; enc_case} in
-    let dec = Dec_app (map.dec, id) in
+    let dec = Dec_app (map.dec, Dec_arg id) in
     { map with dec; shape = Object_cases (None, cases) }
 
   (* Unknown members *)
@@ -1239,7 +1219,7 @@ module Object = struct
 
   let keep_unknown ?enc mems (map : ('o, 'dec) object_map) =
     let enc = match enc with None -> mems_noenc mems | Some enc -> enc in
-    let dec = Dec_app (map.dec, mems.id) in
+    let dec = Dec_app (map.dec, Dec_arg mems.id) in
     let unknown = Unknown_keep (mems, enc) in
     { map with dec; shape = set_shape_unknown_mems map.shape unknown }
 
