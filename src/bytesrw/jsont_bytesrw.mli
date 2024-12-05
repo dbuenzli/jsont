@@ -54,7 +54,7 @@ val encode :
 (** [encode t v w] encodes value [v] according to [t] on [w].
     {ul
     {- If [buf] is specified it is used as a buffer for the slices written
-       on [w]. Defaults to a buffer of length {!Bytes.Slice.io_buffer_size}.}
+       on [w]. Defaults to a buffer of length {!Bytes.Writer.slice_length}[ w].}
     {- [format] specifies how the JSON should be formatted.
        Defaults to {!Jsont.Minify}.}
     {- [number_format] specifies the format string to format numbers. Defaults

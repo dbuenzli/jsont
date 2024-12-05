@@ -747,10 +747,13 @@ type encoder =
     number_format : string; }
 
 let make_encoder
-    ?buf:(o = Bytes.create Bytes.Slice.io_buffer_size)
-    ?(format = Jsont.Minify) ?(number_format = Jsont.default_number_format)
+    ?buf ?(format = Jsont.Minify) ?(number_format = Jsont.default_number_format)
     writer
   =
+  let o = match buf with
+  | Some buf -> buf
+  | None -> Bytes.create (Bytes.Writer.slice_length writer)
+  in
   let len = Bytes.length o in
   let number_format = string_of_format number_format in
   let o_max = len - 1 and o_next = 0 in
