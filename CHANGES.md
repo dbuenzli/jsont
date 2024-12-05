@@ -1,4 +1,6 @@
 
+- `Jsont.Array.map` make encoding and decoding optional. Like
+   in every other map.
 - `Jsont_bytesrw.encode` change the default buffer size
   to match the one hinted by the writer rather than
   `Bytesrw.Bytes.Slice.io_buffer_size`.

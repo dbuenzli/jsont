@@ -779,12 +779,29 @@ module Array = struct
   type ('array, 'elt) enc =
     { enc : 'acc. ('acc -> int -> 'elt -> 'acc) -> 'acc -> 'array -> 'acc }
 
+  let array_kind kind = Sort.kinded ~kind Sort.Array
   let default_skip _i _builder = false
   let map
-      ?(kind = "") ?(doc = "") ~dec_empty ?dec_skip ~dec_add ~dec_finish
-      ~enc:{enc} ?(enc_meta = enc_meta_none) elt
+      ?(kind = "") ?(doc = "") ?dec_empty ?dec_skip ?dec_add ?dec_finish
+      ?enc ?(enc_meta = enc_meta_none) elt
     =
+    let dec_empty = match dec_empty with
+    | Some dec_empty -> dec_empty
+    | None -> fun () -> Error.no_decoder Meta.none ~kind:(array_kind kind)
+    in
     let dec_skip = Option.value ~default:default_skip dec_skip in
+    let dec_add = match dec_add with
+    | Some dec_add -> dec_add
+    | None -> fun _ _ _ -> Error.no_decoder Meta.none ~kind:(array_kind kind)
+    in
+    let dec_finish = match dec_finish with
+    | Some dec_finish -> dec_finish
+    | None -> fun _ _ _ -> Error.no_decoder Meta.none ~kind:(array_kind kind)
+    in
+    let enc = match enc with
+    | Some { enc } -> enc
+    | None -> fun _ _ _ -> Error.no_encoder Meta.none ~kind:(array_kind kind)
+    in
     { Repr.kind; doc; elt; dec_empty; dec_add; dec_skip; dec_finish; enc;
       enc_meta; }
 

@@ -773,11 +773,11 @@ module Array : sig
 
   val map :
     ?kind:string -> ?doc:string ->
-    dec_empty:(unit -> 'builder) ->
+    ?dec_empty:(unit -> 'builder) ->
     ?dec_skip:(int -> 'builder -> bool) ->
-    dec_add:(int -> 'elt -> 'builder -> 'builder) ->
-    dec_finish:(Meta.t -> int -> 'builder -> 'array) ->
-    enc:('array, 'elt) enc ->
+    ?dec_add:(int -> 'elt -> 'builder -> 'builder) ->
+    ?dec_finish:(Meta.t -> int -> 'builder -> 'array) ->
+    ?enc:('array, 'elt) enc ->
     ?enc_meta:('array -> Meta.t) -> 'elt t ->
     ('array, 'elt, 'builder) map
   (** [map elt] maps JSON arrays of type ['elt] to arrays of
@@ -785,18 +785,24 @@ module Array : sig
       {ul
       {- [kind] names the entities represented by the map and [doc]
          documents them. Both default to [""].}
-      {- [dec_empty ()] is used to create a builder for the empty array.}
+      {- [dec_empty ()] is used to create a builder for the empty array.
+         Can be omitted if the map is only used for encoding, the default
+         unconditionally errors.}
       {- [dec_skip i b] is used to skip the [i]th index of the JSON array.
          If [true], the element is not decoded with [elt] and not added with
          [dec_add] but skipped. The default always returns [false].}
       {- [dec_add i v] is used to add the [i]th JSON element [v] $
-         decoded by [elt] to the builder [b].}
-      {- [dec_finish b] converts the builder to the final array.}
+         decoded by [elt] to the builder [b]. Can be omitted if the map is
+         only used for encoding, the default unconditionally errors.}
+      {- [dec_finish b] converts the builder to the final array.
+         Can be omitted if the map is only used for encoding, the default
+         unconditionally errors.}
       {- [enc.enc f acc a] folds over the elements of array [a] in
          increasing order with [f] and starting with [acc]. This function
-         is used to encode [a] to a JSON array.}
+         is used to encode [a] to a JSON array. Can be omitted if the
+         map is only used for decoding, the default unconditionally errors.}
       {- [enc_meta a] is the metadata to use for encoding [v] to a JSON
-         array.}} *)
+         array. Default returns {!Meta.none}.}} *)
 
   val list_map :
     ?kind:string -> ?doc:string ->
