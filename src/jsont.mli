@@ -1103,24 +1103,31 @@ module Object : sig
         type ['mems] using a builder of type ['builder]. *)
 
     val map :
-      ?kind:string -> ?doc:string -> 'a jsont ->
-      dec_empty:(unit -> 'builder) ->
-      dec_add:(Meta.t -> string -> 'a -> 'builder -> 'builder) ->
-      dec_finish:(Meta.t -> 'builder -> 'mems) ->
-      enc:('mems, 'a) enc -> ('mems, 'a, 'builder) map
+      ?kind:string -> ?doc:string ->
+      ?dec_empty:(unit -> 'builder) ->
+      ?dec_add:(Meta.t -> string -> 'a -> 'builder -> 'builder) ->
+      ?dec_finish:(Meta.t -> 'builder -> 'mems) ->
+      ?enc:('mems, 'a) enc -> 'a jsont -> ('mems, 'a, 'builder) map
     (** [map type'] maps unknown members of uniform type ['a]
         to values of type ['mems] built with type ['builder].
         {ul
         {- [kind] names the entities represented by the map and [doc]
            documents them. Both default to [""].}
-        {- [dec_empty] is used to create a builder for the members}
+        {- [dec_empty] is used to create a builder for the members.
+           Can be omitted if the map is only used for encoding, the default
+           unconditionally errors.}
         {- [dec_add meta name v b] is used to add a member named [name]
-           with meta [meta] with member value [v] to builder [b]}
+           with meta [meta] with member value [v] to builder [b].
+           Can be omitted if the map is only used for encoding, the default
+           unconditionally errors.}
         {- [dec_finish meta b]  converts the builder to the final members
            value. [meta] is the metadata of the object in which they were
-           found.}
+           found. Can be omitted if the map is only used for encoding, the
+           default unconditionally errors.}
         {- [enc f mems acc] folds over the elements of [mems] starting
-           with [acc]. This function is used to encode the members}}
+           with [acc]. This function is used to encode the members.
+           Can be omitted if the map is only used for decoding, the
+           default unconditionally errors.}}
         See {!keep_unknown}. *)
 
     val string_map :

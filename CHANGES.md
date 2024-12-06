@@ -1,4 +1,6 @@
 
+- `Jsont.Object.Mems.map` make encoding and decoding optional. Like
+   in overy other map.
 - `Jsont.Array.map` make encoding and decoding optional. Like
    in every other map.
 - `Jsont_bytesrw.encode` change the default buffer size

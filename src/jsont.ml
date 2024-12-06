@@ -1124,10 +1124,27 @@ module Object = struct
 
     type ('mems, 'a, 'builder) map = ('mems, 'a, 'builder) mems_map
 
+    let mems_kind kind = Sort.kinded' ~kind "members map"
     let map
-        ?(kind = "") ?(doc = "") mems_type ~dec_empty ~dec_add ~dec_finish
-        ~enc:{enc}
+        ?(kind = "") ?(doc = "") ?dec_empty ?dec_add ?dec_finish
+        ?enc mems_type
       =
+      let dec_empty = match dec_empty with
+      | Some dec_empty -> dec_empty
+      | None -> fun () -> Error.no_decoder Meta.none ~kind:(mems_kind kind)
+      in
+      let dec_add = match dec_add with
+      | Some dec_add -> dec_add
+      | None -> fun _ _ _ _ -> Error.no_decoder Meta.none ~kind:(mems_kind kind)
+      in
+      let dec_finish = match dec_finish with
+      | Some dec_finish -> dec_finish
+      | None -> fun _ _ -> Error.no_decoder Meta.none ~kind:(mems_kind kind)
+      in
+      let enc = match enc with
+      | Some { enc } -> enc
+      | None -> fun _ _ _ -> Error.no_encoder Meta.none ~kind:(mems_kind kind)
+      in
       let id = Type.Id.make () in
       { kind; doc; mems_type; id; dec_empty; dec_add; dec_finish; enc }
 
