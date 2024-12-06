@@ -1,3 +1,5 @@
+v0.1.1 2024-12-06 La Forclaz (VS)
+---------------------------------
 
 - `Jsont.Object.Mems.map` make encoding and decoding optional. Like
    in overy other map.
@@ -7,7 +9,7 @@
   to match the one hinted by the writer rather than
   `Bytesrw.Bytes.Slice.io_buffer_size`.
 - `jsont.{bytesrw,brr}` export all requires.
-- `jsont` tool remove spurious dependency on `b0.std`.
+- `jsont` tool remove spurious dependency on `b0.std` (#2).
 
 v0.1.0 2024-11-29 Zagreb
 ------------------------
