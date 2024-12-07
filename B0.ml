@@ -16,8 +16,7 @@ let jsont_brr = B0_ocaml.libname "jsont.brr"
 
 let jsont_lib =
   let srcs = [ `Dir ~/"src" ] in
-  let requires = [bytesrw] and name = "jsont-lib" in
-  B0_ocaml.lib jsont ~name ~srcs ~requires
+  B0_ocaml.lib jsont ~name:"jsont-lib" ~srcs
 
 let jsont_bytesrw_lib =
   let srcs = [ `Dir ~/"src/bytesrw" ] in

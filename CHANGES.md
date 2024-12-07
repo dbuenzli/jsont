@@ -1,3 +1,8 @@
+
+
+- Fix `META` file. Really export all requires and
+  remove uneeded `bytesrw` dependency from `jsont` library.
+
 v0.1.1 2024-12-06 La Forclaz (VS)
 ---------------------------------
 
