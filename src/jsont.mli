@@ -1192,7 +1192,9 @@ val map :
        encoding. The default errors.}
     {- [enc] encodes values of type ['b] to values of type ['a].
        Can be omitted if the result is only used for
-       decoding. The default errors.}} *)
+       decoding. The default errors.}}
+
+    For mapping base types use {!Jsont.Base.map}. *)
 
 val iter :
   ?kind:string -> ?doc:string -> ?dec:('a -> unit) -> ?enc:('a -> unit) ->
