@@ -1069,6 +1069,7 @@ module Object = struct
     let map ?(dec = no_dec) tag obj =
       { tag; object_map = get_object_map obj; dec; }
 
+    let map_tag c = c.tag
     let make c = Case c
     let value c v = Case_value (c, v)
   end

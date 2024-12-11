@@ -1020,6 +1020,9 @@ module Object : sig
         Raises [Invalid_argument] if [obj] is not a direct result of
         {!finish}, that is if [obj] does not describe an object. *)
 
+    val map_tag : ('cases, 'case, 'tag) map -> 'tag
+    (** [map_tag m] is [m]'s tag. *)
+
     (** {1:cases Cases} *)
 
     type ('cases, 'tag) t
