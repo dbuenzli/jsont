@@ -1,4 +1,6 @@
 
+- Add `Jsont.with_doc` to update kind and doc strings of existing JSON
+  types.
 - Add `Jsont.Object.Case.map_tag` to access a case map's tag.
 - Fix `META` file. Really export all requires and
   remove uneeded `bytesrw` dependency from `jsont` library.

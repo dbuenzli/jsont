@@ -287,6 +287,42 @@ module Repr = struct (* See the .mli for documentation *)
 
   (* Kinds and doc *)
 
+  let base_map_with_doc ?kind ?doc (map : ('a, 'b) base_map) =
+    let kind = Option.value ~default:map.kind doc in
+    let doc = Option.value ~default:map.doc doc in
+    { map with kind; doc }
+
+  let array_map_with_doc ?kind ?doc (map : ('a, 'b, 'c) array_map) =
+    let kind = Option.value ~default:map.kind doc in
+    let doc = Option.value ~default:map.doc doc in
+    { map with kind; doc }
+
+  let object_map_with_doc ?kind ?doc (map : ('o, 'o) object_map) =
+    let kind = Option.value ~default:map.kind doc in
+    let doc = Option.value ~default:map.doc doc in
+    { map with kind; doc }
+
+  let any_map_with_doc ?kind ?doc (map : 'a any_map) =
+    let kind = Option.value ~default:map.kind doc in
+    let doc = Option.value ~default:map.doc doc in
+    { map with kind; doc }
+
+  let map_with_doc ?kind ?doc (map : ('a, 'b) map) =
+    let kind = Option.value ~default:map.kind doc in
+    let doc = Option.value ~default:map.doc doc in
+    { map with kind; doc }
+
+  let rec with_doc ?kind ?doc = function
+  | Null map -> Null (base_map_with_doc ?kind ?doc map)
+  | Bool map -> Bool (base_map_with_doc ?kind ?doc map)
+  | Number map -> Number (base_map_with_doc ?kind ?doc map)
+  | String map -> String (base_map_with_doc ?kind ?doc map)
+  | Array map -> Array (array_map_with_doc ?kind ?doc map)
+  | Object map -> Object (object_map_with_doc ?kind ?doc map)
+  | Any map -> Any (any_map_with_doc ?kind ?doc map)
+  | Map map -> Map (map_with_doc ?kind ?doc map)
+  | Rec l -> with_doc ?kind ?doc (Lazy.force l)
+
   let object_map_kinded_sort (map : ('o, 'dec) object_map) =
     Sort.kinded ~kind:map.kind Object
 
@@ -448,6 +484,7 @@ type 'a t = 'a Repr.t
 let kinded_sort = Repr.kinded_sort
 let kind = Repr.kind
 let doc = Repr.doc
+let with_doc = Repr.with_doc
 
 (* Base types *)
 

@@ -491,6 +491,10 @@ val kind : 'a t -> string
 val doc : 'a t -> string
 (** [doc t] is a documentation string for the JSON values typed by [t]. *)
 
+val with_doc : ?kind:string -> ?doc:string -> 'a t -> 'a t
+(** [with_doc ?kind ?doc t] is [t] with its {!doc} or {!kind}
+    updated to the corresponding values if specified. *)
+
 (** {1:base Base types}
 
     Read the {{!page-cookbook.base_types}cookbook} on base types. *)
@@ -1961,6 +1965,9 @@ module Repr : sig
 
   val doc : 'a t -> string
   (** See {!Jsont.doc}. *)
+
+  val with_doc : ?kind:string -> ?doc:string -> 'a t -> 'a t
+  (** See {!Jsont.with_doc}. *)
 
   (** {1:errors Errors} *)
 
