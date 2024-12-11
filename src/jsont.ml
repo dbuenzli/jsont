@@ -96,6 +96,9 @@ module Error = struct
 
   (* Predefined errors *)
 
+  let expected meta exp ~fnd =
+    msgf meta "Expected %a but found %a" Fmt.code exp Fmt.code fnd
+
   let sort meta ~exp ~fnd =
     msgf meta "Expected %a but found %a" Sort.pp exp Sort.pp fnd
 

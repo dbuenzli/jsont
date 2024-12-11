@@ -1,4 +1,5 @@
 
+- Add `Jsont.Error.expected` to help format error messages.
 - Add `Jsont.with_doc` to update kind and doc strings of existing JSON
   types.
 - Add `Jsont.Object.Case.map_tag` to access a case map's tag.

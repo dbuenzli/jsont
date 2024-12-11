@@ -429,6 +429,10 @@ module Error : sig
   val msgf : Meta.t -> ('a, Stdlib.Format.formatter, unit, 'b) format4 -> 'a
   (** [msgf meta fmt …] is like {!val-msg} but formats an error message. *)
 
+  val expected : Meta.t -> string -> fnd:string -> 'a
+  (** [expected meta fmt exp ~fnd] is
+      [msgf "Expected %s but found %s" exp fnd]. *)
+
   val push_array : string node -> int node -> t -> 'a
   (** [push_array kinded_sort n e] contextualises [e] as an error in the
       [n]th element of an array of {{!Jsont.kinded_sort}kinded sort}
