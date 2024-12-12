@@ -65,6 +65,10 @@ let geojson =
   let requires = [cmdliner; bytesrw; jsont_bytesrw] in
   test ~/"test/geojson.ml" ~run:false ~doc ~requires
 
+let jsonrpc =
+  let doc = "Jsont modelling of JSON-RPC" in
+  test ~/"test/json_rpc.ml" ~run:false ~doc
+
 let test_common =
   [ `File ~/"test/test_common.ml"; `File ~/"test/test_common_samples.ml" ]
 
