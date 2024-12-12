@@ -57,9 +57,9 @@ type error =
 let error code message data = { code; message; data }
 let error_jsont =
   Jsont.Object.map error
-  |> Jsont.Object.mem "code" Jsont.int
-  |> Jsont.Object.mem "message" Jsont.string
-  |> Jsont.Object.opt_mem "data" Jsont.json
+  |> Jsont.Object.mem "code" Jsont.int ~enc:(fun e -> e.code)
+  |> Jsont.Object.mem "message" Jsont.string ~enc:(fun e -> e.message)
+  |> Jsont.Object.opt_mem "data" Jsont.json ~enc:(fun e -> e.data)
   |> Jsont.Object.finish
 
 (* JSON-RPC response object *)

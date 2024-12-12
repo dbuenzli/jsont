@@ -106,7 +106,7 @@ let items_to_json is = Jsont_brr.encode items is
 ]}
 
 The {{!page-cookbook}cookbook} has more JSON modelling recipes, the
-{{:https://erratique.ch/repos/jsont/tree/test/topojson.ml}[topojson.ml]}
-and
-{{:https://erratique.ch/repos/jsont/tree/test/geojson.ml}[geojson.ml]}
-in the source repository provide full examples of JSON schema modelisation.
+{{:https://erratique.ch/repos/jsont/tree/test/topojson.ml}[topojson.ml]},
+{{:https://erratique.ch/repos/jsont/tree/test/geojson.ml}[geojson.ml]},
+{{:https://erratique.ch/repos/jsont/tree/test/json_rpc.ml}[json_rpc.ml]},
+in the source repository provide full examples of JSON schema modelisations.

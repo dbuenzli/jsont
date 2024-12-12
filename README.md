@@ -45,12 +45,13 @@ issue tracker.
 ## Examples
 
 A few examples can be found in the [documentation][online] and in the
-[test](test/) directory. The [`test/topojson.ml`] and
-[`test/geojson.ml`] show use of the library on concrete JSON data
-formats.
+[test](test/) directory. The [`test/topojson.ml`],
+[`test/geojson.ml`], [`test/json_rpc.ml`], show use of the library on 
+concrete JSON data formats.
 
 [`test/topojson.ml`]: test/topojson.ml
 [`test/geojson.ml`]: test/geojson.ml
+[`test/json_rpc.ml`]: test/json_rpc.ml
 
 ## Paper & technique
 
