@@ -32,10 +32,22 @@ let id_jsont : id Jsont.t =
 
 (* JSON-RPC request object *)
 
+type params = Jsont.json (* An array or object *)
+let params_jsont =
+  let enc = function
+  | Jsont.Object _ | Jsont.Array _ -> Jsont.json
+  | j ->
+      let meta = Jsont.Meta.none in
+      let fnd = Jsont.Sort.to_string (Jsont.Json.sort j) in
+      Jsont.Error.expected meta "object or array" ~fnd
+  in
+  let kind = "JSON-RPC params" in
+  Jsont.any ~kind ~dec_array:Jsont.json ~dec_object:Jsont.json ~enc ()
+
 type request =
   { jsonrpc : jsonrpc;
     method' : string;
-    params : Jsont.json option;
+    params : params option;
     id : id option; }
 
 let request jsonrpc method' params id = { jsonrpc; method'; params; id }
@@ -43,7 +55,7 @@ let request_jsont : request Jsont.t =
   Jsont.Object.map request
   |> Jsont.Object.mem "jsonrpc" jsonrpc_jsont ~enc:(fun r -> r.jsonrpc)
   |> Jsont.Object.mem "method" Jsont.string ~enc:(fun r -> r.method')
-  |> Jsont.Object.opt_mem "params" Jsont.json ~enc:(fun r -> r.params)
+  |> Jsont.Object.opt_mem "params" params_jsont ~enc:(fun r -> r.params)
   |> Jsont.Object.opt_mem "id" id_jsont ~enc:(fun r -> r.id)
   |> Jsont.Object.finish
 
