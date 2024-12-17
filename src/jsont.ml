@@ -1111,6 +1111,7 @@ module Object = struct
 
     let map_tag c = c.tag
     let make c = Case c
+    let tag (Case c) = map_tag c
     let value c v = Case_value (c, v)
   end
 

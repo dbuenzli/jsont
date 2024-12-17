@@ -1040,6 +1040,9 @@ module Object : sig
     val make : ('cases, 'case, 'tag) map -> ('cases, 'tag) t
     (** [make map] is [map] as a case. *)
 
+    val tag : ('cases, 'tag) t -> 'tag
+    (** [tag c] is the tag of [c]. *)
+
     (** {1:case Case values} *)
 
     type ('cases, 'tag) value
