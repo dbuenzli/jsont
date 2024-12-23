@@ -19,6 +19,19 @@ performed on the definition. Hence it's better to construct them as
 toplevel values or at least make sure you are not repeatedly
 constructing them dynamically in a tight loop.
 
+{2:erroring Erroring}
+
+Jsont types are full of your functions that you specify to implement
+the decoding and encoding process (e.g. base map decoding and encoding
+functions, object map constructors, object map member projectors,
+etc.). In general in any of these functions it is always safe to error
+by raising the {!Jsont.exception-Error} exception if you need to.
+
+Use the functions in the {!Jsont.module-Error} to format error
+messages.  They usually require to specify a {!Jsont.Meta.t} value to
+precisely locate the error. If you have none to provide simply use
+{!Jsont.Meta.none}.
+
 {1:dealing_with_null Dealing with [null] values}
 
 Nullable JSON values are naturally mapped to ocaml [option] types. The
