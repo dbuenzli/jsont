@@ -19,7 +19,7 @@ performed on the definition. Hence it's better to construct them as
 toplevel values or at least make sure you are not repeatedly
 constructing them dynamically in a tight loop.
 
-{2:erroring Erroring}
+{2:general_erroring Erroring}
 
 Jsont types are full of your functions that you specify to implement
 the decoding and encoding process (e.g. base map decoding and encoding
@@ -403,6 +403,52 @@ module Geometry_record = struct
     |> Jsont.Object.finish
 end
 ]}
+
+{2:cases_untagged Untagged object types}
+
+Sometimes objects types are not determined by a specific {{!cases}case
+member} but rather by the presence or absence of certain members. In
+this case the easiest is to make object members optional with
+{!Jsont.Object.opt_mem} and sort out their presence and absence
+manually in the decoding function given to {!Jsont.Object.val-map}.
+
+For example a response message that has always an [id] member and a
+[result] member in case of success and an mutually exclusive [error]
+member in case of error can be modelled as follows:
+{[
+module Response = struct
+  type t =
+    { id : int;
+      value : (Jsont.json, string) result }
+
+  let make id result error =
+    let pp_mem = Jsont.Repr.pp_code in
+    match result, error with
+    | Some result, None -> { id; value = Ok result }
+    | None, Some error -> { id; value = Error error }
+    | Some _ , Some _ ->
+        Jsont.Error.msgf Jsont.Meta.none "Both %a and %a members are defined"
+          pp_mem "result" pp_mem "error"
+    | None, None ->
+        Jsont.Error.msgf Jsont.Meta.none "Missing either %a or %a member"
+          pp_mem "result" pp_mem "error"
+
+  let result r = match r.value with Ok v -> Some v | Error _ -> None
+  let error r = match r.value with Ok _ -> None | Error e -> Some e
+
+  let jsont =
+    Jsont.Object.map make
+    |> Jsont.Object.mem "id" Jsont.int ~enc:(fun r -> r.id)
+    |> Jsont.Object.opt_mem "result" Jsont.json ~enc:result
+    |> Jsont.Object.opt_mem "error" Jsont.string ~enc:error
+    |> Jsont.Object.finish
+end
+]}
+
+A {{:https://www.jsonrpc.org/specification#response_object}JSON-RPC
+response object} has such a structure. A full modelling of the data
+JSON-RPC data format with [Jsont] can be found
+{{:https://erratique.ch/repos/jsont/tree/test/json_rpc.ml}here}.
 
 {2:flattening Flattening nested objects}
 

@@ -209,6 +209,37 @@ module Geometry_record = struct
     |> Jsont.Object.finish
 end
 
+
+(* Untagged object types *)
+
+module Response = struct
+  type t =
+    { id : int;
+      value : (Jsont.json, string) result }
+
+  let make id result error =
+    let pp_mem = Jsont.Repr.pp_code in
+    match result, error with
+    | Some result, None -> { id; value = Ok result }
+    | None, Some error -> { id; value = Error error }
+    | Some _ , Some _ ->
+        Jsont.Error.msgf Jsont.Meta.none "Both %a and %a members are defined"
+          pp_mem "result" pp_mem "error"
+    | None, None ->
+        Jsont.Error.msgf Jsont.Meta.none "Missing either %a or %a member"
+          pp_mem "result" pp_mem "error"
+
+  let result r = match r.value with Ok v -> Some v | Error _ -> None
+  let error r = match r.value with Ok _ -> None | Error e -> Some e
+
+  let jsont =
+    Jsont.Object.map make
+    |> Jsont.Object.mem "id" Jsont.int ~enc:(fun r -> r.id)
+    |> Jsont.Object.opt_mem "result" Jsont.json ~enc:result
+    |> Jsont.Object.opt_mem "error" Jsont.string ~enc:error
+    |> Jsont.Object.finish
+end
+
 (* Flattening objects on queries *)
 
 module Group = struct
