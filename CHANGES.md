@@ -1,4 +1,6 @@
 
+- Fix `Jsont.zero` failing encodes rather than encoding `null` as
+  advertised. Thanks to Adrián Montesinos González for the report (#6).
 - Add `Jsont.Error.expected` to help format error messages.
 - Add `Jsont.with_doc` to update kind and doc strings of existing JSON
   types.

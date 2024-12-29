@@ -1244,7 +1244,7 @@ let ignore =
 
 let zero =
   let kind = "zero" in
-  let null = Repr.Null Base.ignore and dec_bool = Repr.Bool Base.ignore in
+  let null = null () and dec_bool = Repr.Bool Base.ignore in
   let dec_number = Repr.Number Base.ignore in
   let dec_string = Repr.String Base.ignore in
   let dec_array = Array.ignore and dec_object = Object.zero in

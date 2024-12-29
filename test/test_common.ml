@@ -469,6 +469,17 @@ let test_rec () =
   trip tree_cases Tree_data.tree0_cases ~value:Tree_data.tree0 ~__POS__;
   ()
 
+let test_zero () =
+  Test.test "Jsont.zero" @@ fun () ->
+  let decode_ok = decode_ok ~eq:Test.Eq.unit in
+  decode_ok Jsont.zero "null" ~value:() ~__POS__;
+  decode_ok Jsont.zero "2" ~value:() ~__POS__;
+  decode_ok Jsont.zero {|"a"|} ~value:() ~__POS__;
+  decode_ok Jsont.zero {|[1]|} ~value:() ~__POS__;
+  decode_ok Jsont.zero {|{"bli":"bla"}|} ~value:() ~__POS__;
+  encode_ok Jsont.zero ~value:() "null" ~__POS__;
+  ()
+
 let test_const () =
   Test.test "Jsont.const" @@ fun () ->
   trip ~lossy:true Jsont.(const int 4) " {} " ~value:4 ~__POS__;
@@ -631,6 +642,7 @@ let tests () =
   test_unknown_mems ();
   test_cases ();
   test_rec ();
+  test_zero ();
   test_const ();
   test_array_queries ();
   test_object_queries ();
