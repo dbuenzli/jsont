@@ -393,7 +393,7 @@ let test_arrays () =
   ()
 
 let test_objects () =
-  Test.test "Jsont.Obj.map" @@ fun () ->
+  Test.test "Jsont.Object.map" @@ fun () ->
   trip ~eq ~format:Layout Jsont.json " {} \n" ~__POS__;
   trip ~eq ~format:Layout Jsont.json {| {"a": 1}  |} ~__POS__;
   trip ~eq ~format:Layout Jsont.json {| {"a": 1,  "b":2}  |} ~__POS__;
@@ -404,7 +404,7 @@ let test_objects () =
   ()
 
 let test_unknown_mems () =
-  Test.test "Jsont.Obj.*_unknown" @@ fun () ->
+  Test.test "Jsont.Object.*_unknown" @@ fun () ->
   (* Skip unknowns *)
   trip Unknown.skip_jsont Unknown_data.u0 ~__POS__;
   trip ~lossy:true Unknown.skip_jsont Unknown_data.u1 ~__POS__;
@@ -420,7 +420,7 @@ let test_unknown_mems () =
   ()
 
 let test_cases () =
-  Test.test "Jsont.Obj.Case" @@ fun () ->
+  Test.test "Jsont.Object.Case" @@ fun () ->
   decode_error Cases.Person_top.jsont Cases_data.invalid_miss ~__POS__;
   decode_error Cases.Person_top.jsont Cases_data.invalid_case ~__POS__;
   decode_error Cases.Person_field.jsont Cases_data.invalid_miss ~__POS__;
