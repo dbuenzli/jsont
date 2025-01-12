@@ -1037,8 +1037,11 @@ module Object = struct
     | None -> Some kind
     | Some kind' ->
         let ks k = Sort.or_kind ~kind Object in
+        let k0 = ks kind and k1 = ks kind' in
         invalid_arg @@
-        Fmt.str "member %s defined both in %s and %s" n (ks kind) (ks kind')
+        if String.equal k0 k1
+        then Fmt.str "member %s defined twice in %s" n k0
+        else Fmt.str "member %s defined both in %s and %s" n k0 k1
     in
     let rec loop :
       type o dec. string String_map.t -> (o, dec) object_map -> unit
