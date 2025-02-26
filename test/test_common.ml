@@ -111,7 +111,7 @@ let trip
     Test.string src trip ~__POS__
   end
 
-let eq : (module Test.Eq.T with type t = 'a)  = (module Jsont.Json)
+let eq : (module Test.T with type t = 'a)  = (module Jsont.Json)
 
 (* Tests *)
 
