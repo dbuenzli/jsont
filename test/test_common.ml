@@ -32,7 +32,7 @@ let encode ?format t v = !test_funs.encode ?format t v
    be correct. If something really feels fishy you may have to
    investigate here too. *)
 
-let decode_ok ?__POS__:pos ?value ?(eq = Test.Eq.any) t json =
+let decode_ok ?__POS__:pos ?value ?(eq = Test.T.any) t json =
   Test.block ?__POS__:pos @@ fun () ->
   match decode t json with
   | Error e -> Test.fail "%a" Fmt.lines e ~__POS__
@@ -86,14 +86,23 @@ let update ?__POS__:pos ?(format = Jsont.Minify) q j j' =
    must be equal *)
 
 let trip
-    ?(format = Jsont.Minify) ?(lossy = false) ?value ?(eq = Test.Eq.any)
+    ?(format = Jsont.Minify) ?(lossy = false) ?value ?(eq = Test.T.any)
     ?__POS__:pos t src
   =
   Test.block ?__POS__:pos @@ fun () ->
   let layout = format = Jsont.Layout in
-  let v = decode ~layout t src |> Test.get_ok ~__POS__ in
-  let trip = encode ~format t v |> Test.get_ok ~__POS__ in
-  let v' = decode t trip |> Test.get_ok ~__POS__ in
+  let v =
+    Test.noraise ~__POS__ @@ fun () ->
+    Result.get_ok' (decode ~layout t src)
+  in
+  let trip =
+    Test.noraise ~__POS__ @@ fun () ->
+    Result.get_ok' (encode ~format t v)
+  in
+  let v' =
+    Test.noraise ~__POS__ @@ fun () ->
+    Result.get_ok' (decode t trip)
+  in
   begin match value with
   | None -> Test.eq eq v v' ~__POS__;
   | Some value ->
@@ -101,8 +110,14 @@ let trip
       Test.eq eq v' value ~__POS__;
   end;
   if not lossy then begin
-    let json = decode Jsont.json src |> Test.get_ok ~__POS__ in
-    let trip = decode Jsont.json trip |> Test.get_ok ~__POS__ in
+    let json =
+      Test.noraise ~__POS__ @@ fun () ->
+      Result.get_ok' (decode Jsont.json src)
+    in
+    let trip =
+      Test.noraise ~__POS__ @@ fun () ->
+      Result.get_ok' (decode Jsont.json trip)
+    in
     Test.eq (module Jsont.Json) json trip ~__POS__
   end;
   if format <> Jsont.Minify then begin
@@ -115,7 +130,7 @@ let eq : (module Test.T with type t = 'a)  = (module Jsont.Json)
 
 (* Tests *)
 
-let test_basic_invalid () =
+let test_basic_invalid =
   Test.test "basic invalid JSON" @@ fun () ->
   decode_error Jsont.json "" ~__POS__;
   decode_error (Jsont.null ()) "" ~__POS__;
@@ -130,11 +145,11 @@ let test_basic_invalid () =
   decode_error Jsont.json " ][  " ~__POS__;
   ()
 
-let test_indent () =
+let test_indent =
   Test.test "Encode with indentation" @@ fun () ->
   ()
 
-let test_null () =
+let test_null =
   Test.test "Jsont.null" @@ fun () ->
   trip ~eq ~format:Layout Jsont.json " null \r\n" ~__POS__;
   trip ~eq ~format:Layout Jsont.json "\n null " ~__POS__;
@@ -148,7 +163,7 @@ let test_null () =
   decode_error (Jsont.null ()) " true  " ~__POS__;
   ()
 
-let test_bool () =
+let test_bool =
   Test.test "Jsont.bool" @@ fun () ->
   trip ~eq ~format:Layout Jsont.json " true \r\n" ~__POS__;
   trip ~eq ~format:Layout Jsont.json "\n false " ~__POS__;
@@ -158,12 +173,12 @@ let test_bool () =
   decode_error Jsont.json " fals " ~__POS__;
   decode_error Jsont.json " falsee " ~__POS__;
   decode_error Jsont.json " f " ~__POS__;
-  trip ~eq:Test.Eq.bool Jsont.bool " true \n " ~value:true ~__POS__;
-  trip ~eq:Test.Eq.bool Jsont.bool " false  " ~value:false ~__POS__;
+  trip ~eq:Test.T.bool Jsont.bool " true \n " ~value:true ~__POS__;
+  trip ~eq:Test.T.bool Jsont.bool " false  " ~value:false ~__POS__;
   decode_error Jsont.bool " fals  " ~__POS__;
   ()
 
-let test_numbers () =
+let test_numbers =
   Test.test "Jsont.number" @@ fun () ->
   trip ~eq ~format:Layout Jsont.json " 1 " ~__POS__;
   trip ~eq ~format:Layout Jsont.json " 0 \n " ~__POS__;
@@ -177,7 +192,7 @@ let test_numbers () =
   decode_error Jsont.json " inf  " ~__POS__;
   decode_error Jsont.json " infinity  " ~__POS__;
   decode_error Jsont.json " nan  " ~__POS__;
-  let eq = Test.Eq.float in
+  let eq = Test.T.float in
   trip ~eq Jsont.number " -0  " ~value:(-0.) ~__POS__;
   trip ~eq Jsont.number " 0  " ~value:(0.) ~__POS__;
   trip ~eq Jsont.number " 0E1  " ~value:0. ~__POS__;
@@ -193,7 +208,7 @@ let test_numbers () =
   decode_error Jsont.number " 1eE2  " ~__POS__;
   ()
 
-let test_strings () =
+let test_strings =
   Test.test "Jsont.string" @@ fun () ->
   trip ~eq ~format:Layout Jsont.json {| "" |} ~__POS__;
   trip ~eq ~format:Layout Jsont.json " \"\\\"\" " ~__POS__;
@@ -210,14 +225,14 @@ let test_strings () =
   decode_error Jsont.json "\"hi\nhi\"" ~__POS__;
   decode_error Jsont.json "\n \"abla\" hi " ~__POS__;
   decode_error Jsont.json "\n \"unclosed hi " ~__POS__;
-  trip ~eq:Test.Eq.string
+  trip ~eq:Test.T.string
     Jsont.string "\"\\ud83D\\uDc2B\"" ~value:"🐫" ~__POS__;
-  trip ~eq:Test.Eq.string Jsont.string "\"🐫 a\"" ~value:"🐫 a" ~__POS__;
+  trip ~eq:Test.T.string Jsont.string "\"🐫 a\"" ~value:"🐫 a" ~__POS__;
   decode_error Jsont.string " false  " ~__POS__;
   decode_error Jsont.string "1.0" ~__POS__;
   ()
 
-let test_option () =
+let test_option =
   Test.test "Jsont.{none,some,option}" @@ fun () ->
   (* none *)
   decode_error Jsont.none "2" ~__POS__;
@@ -235,7 +250,7 @@ let test_option () =
   trip Jsont.(option bool) "null" ~value:None ~__POS__;
   ()
 
-let test_ints () =
+let test_ints =
   Test.test "Jsont.{int…,uint…}" @@ fun () ->
   (* uint8 *)
   decode_error Jsont.uint8 "null" ~__POS__;
@@ -291,11 +306,11 @@ let test_ints () =
     (Fmt.str {|"%Ld"|} Int64.min_int) ~value:Int64.min_int ~__POS__;
   ()
 
-let test_floats () =
+let test_floats =
   Test.test "Jsont.{any_float,float_as_hex_string}" @@ fun () ->
   (* any_float *)
   let jsonstr f = Fmt.str {|"%s"|} (Float.to_string f) in
-  let eq = Test.Eq.float in
+  let eq = Test.T.float in
   decode_ok ~eq Jsont.any_float "null" ~value:Float.nan ~__POS__;
   trip ~eq Jsont.any_float " -0  " ~value:(-0.) ~__POS__;
   trip ~eq Jsont.any_float " 0  " ~value:(0.) ~__POS__;
@@ -319,14 +334,14 @@ let test_floats () =
   trip ~eq t (jsonstr Float.neg_infinity) ~value:Float.neg_infinity ~__POS__;
   ()
 
-let test_enum_and_binary_string () =
+let test_enum_and_binary_string =
   Test.test "Jsont.{of_of_string,enum,binary_string}" @@ fun () ->
   (* of_string *)
   let int_of_string s = match int_of_string_opt s with
   | None -> Error "Not an integer" | Some i -> Ok i
   in
   let t = Jsont.of_of_string ~kind:"int" int_of_string ~enc:Int.to_string in
-  trip ~eq:(Test.Eq.int) t {|"1"|} ~value:1 ~__POS__;
+  trip ~eq:(Test.T.int) t {|"1"|} ~value:1 ~__POS__;
   decode_error t {|"bla"|} ~__POS__;
   (* enum *)
   let enum = Jsont.enum ~kind:"heyho" ["hey", `Hey; "ho", `Ho ] in
@@ -343,7 +358,7 @@ let test_enum_and_binary_string () =
   trip Jsont.binary_string {|"00a1ff"|} ~value:"\x00\xa1\xff" ~__POS__;
   ()
 
-let test_arrays () =
+let test_arrays =
   Test.test "Jsont.{list,array,bigarray,t2,t3,t4,tn}" @@ fun () ->
   let barr arr = Bigarray.Array1.of_array Int C_layout arr in
   trip ~eq ~format:Layout Jsont.json " [] \n" ~__POS__;
@@ -392,7 +407,7 @@ let test_arrays () =
   decode_error t2_int "[1,2,3]" ~__POS__;
   ()
 
-let test_objects () =
+let test_objects =
   Test.test "Jsont.Object.map" @@ fun () ->
   trip ~eq ~format:Layout Jsont.json " {} \n" ~__POS__;
   trip ~eq ~format:Layout Jsont.json {| {"a": 1}  |} ~__POS__;
@@ -403,7 +418,7 @@ let test_objects () =
   trip ~format:Indent Item.jsont Item_data.i1_json ~value:Item_data.i1 ~__POS__;
   ()
 
-let test_unknown_mems () =
+let test_unknown_mems =
   Test.test "Jsont.Object.*_unknown" @@ fun () ->
   (* Skip unknowns *)
   trip Unknown.skip_jsont Unknown_data.u0 ~__POS__;
@@ -419,7 +434,7 @@ let test_unknown_mems () =
   trip Unknown.keep_jsont Unknown_data.u2 ~__POS__;
   ()
 
-let test_cases () =
+let test_cases =
   Test.test "Jsont.Object.Case" @@ fun () ->
   decode_error Cases.Person_top.jsont Cases_data.invalid_miss ~__POS__;
   decode_error Cases.Person_top.jsont Cases_data.invalid_case ~__POS__;
@@ -459,7 +474,7 @@ let test_cases () =
     Cases_data.unknown_a_no_a_unknown;
   ()
 
-let test_rec () =
+let test_rec =
   Test.test "Jsont.rec" @@ fun () ->
   let tree_null = Tree.jsont_with_null Jsont.int in
   trip tree_null Tree_data.empty_null ~value:Tree_data.empty ~__POS__;
@@ -469,9 +484,9 @@ let test_rec () =
   trip tree_cases Tree_data.tree0_cases ~value:Tree_data.tree0 ~__POS__;
   ()
 
-let test_zero () =
+let test_zero =
   Test.test "Jsont.zero" @@ fun () ->
-  let decode_ok = decode_ok ~eq:Test.Eq.unit in
+  let decode_ok = decode_ok ~eq:Test.T.unit in
   decode_ok Jsont.zero "null" ~value:() ~__POS__;
   decode_ok Jsont.zero "2" ~value:() ~__POS__;
   decode_ok Jsont.zero {|"a"|} ~value:() ~__POS__;
@@ -480,7 +495,7 @@ let test_zero () =
   encode_ok Jsont.zero ~value:() "null" ~__POS__;
   ()
 
-let test_const () =
+let test_const =
   Test.test "Jsont.const" @@ fun () ->
   trip ~lossy:true Jsont.(const int 4) " {} " ~value:4 ~__POS__;
   trip ~lossy:true Jsont.(const bool true) ~value:true "false" ~__POS__;
@@ -488,7 +503,7 @@ let test_const () =
 
 let recode_int_to_string = Jsont.(recode ~dec:int string_of_int ~enc:string)
 
-let test_array_queries () =
+let test_array_queries =
   let a = "[1,[ 1, 2], 3] " in
   Test.test "Jsont.{nth,*_nth,filter_map_array,fold_array}" @@
   fun () ->
@@ -543,7 +558,7 @@ let test_array_queries () =
     ~value:4 ~__POS__;
   ()
 
-let test_object_queries () =
+let test_object_queries =
   Test.test "Jsont.{mem,*_mem,fold_object,filter_map_object}" @@ fun () ->
   let o = {| { "a" : { "b" : 1 }, "c": 2 } |} in
   (* Jsont.mem *)
@@ -588,7 +603,7 @@ let test_object_queries () =
     o ~value:3 ~__POS__;
   ()
 
-let test_path_queries () =
+let test_path_queries =
   Test.test "Jsont.{path,*_path}" @@ fun () ->
   let v = {| [ 0, { "a": 1}, 2 ] |} in
   (* Jsont.path *)

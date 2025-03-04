@@ -18,7 +18,8 @@ let status_of_filename name =
 let test ~show_errors file =
   let name = Fpath.basename file in
   Test.test name @@ fun () ->
-  Test.get_ok @@
+  Test.noraise ~__POS__ @@ fun () ->
+  Result.get_ok' @@
   let* json = Os.File.read file in
   let status = status_of_filename name in
   let file = Fpath.to_string file in
@@ -47,7 +48,7 @@ let run ~dir ~show_errors =
   let dir = Fpath.(dir / "test_parsing") in
   let* files = Os.Dir.fold_files ~recurse:false Os.Dir.path_list dir [] in
   Result.ok @@ Test.main @@ fun () ->
-  List.iter (test ~show_errors) files
+  List.iter (fun file -> test ~show_errors file ()) files
 
 open Cmdliner
 open Cmdliner.Term.Syntax
