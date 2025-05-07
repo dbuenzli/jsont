@@ -765,7 +765,7 @@ let flush e =
   Bytes.Writer.write e.writer (Bytes.Slice.make e.o ~first:0 ~length:e.o_next);
   e.o_next <- 0
 
-let write_eot e = flush e; Bytes.Writer.write_eod e.writer
+let write_eot ~eod e = flush e; if eod then Bytes.Writer.write_eod e.writer
 let write_char e c =
   if e.o_next > e.o_max then flush e;
   Stdlib.Bytes.set e.o e.o_next c; e.o_next <- e.o_next + 1
@@ -1024,7 +1024,7 @@ fun ~nest map umap e ~start mems ->
 let encode' ?buf ?format ?number_format t v ~eod w =
   let e = make_encoder ?buf ?format ?number_format w in
   let t = Jsont.Repr.of_t t in
-  try Ok (encode ~nest:0 t e v; write_eot e) with
+  try Ok (encode ~nest:0 t e v; write_eot ~eod e) with
   | Jsont.Error e -> Error e
 
 let encode ?buf ?format ?number_format t v ~eod w =

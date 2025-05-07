@@ -1,4 +1,7 @@
 
+- Fix `Jsont_bytesrw.{encode,encode'}`. Do not write the `eod` slice if
+  `eod:false` is specified. Thanks to Benjamin Nguyen-Van-Yen for
+  the report and the fix (#8).
 - Fix `Jsont.zero` failing encodes rather than encoding `null` as
   advertised. Thanks to Adrián Montesinos González for the report (#6).
 - Add `Jsont.Error.expected` to help format error messages.
