@@ -1624,8 +1624,8 @@ val pp_string : string fmt
 val pp_json : json fmt
 (** [pp_json] formats JSON, see {!pp_json'}. *)
 
-val pp_json' : ?number_format:number_format -> unit -> json fmt
-(** [pp' ~format ~number_format () ppf j] formats [j] on [ppf]. The output
+val pp_json' : ?indent_size:int -> ?number_format:number_format -> unit -> json fmt
+(** [pp' ~format ~indent_size ~number_format () ppf j] formats [j] on [ppf]. The output
     is indented but may be more compact than an [Indent] JSON encoder may do.
     For example arrays may be output on one line if they fit etc.
     {ul
@@ -1635,7 +1635,7 @@ val pp_json' : ?number_format:number_format -> unit -> json fmt
        ({{!page-cookbook.non_finite_numbers}explanation}).}
     {- Strings are assumed to be valid UTF-8.}} *)
 
-val pp_value : ?number_format:number_format -> 'a t -> unit -> 'a fmt
+val pp_value : ?indent_size:int -> ?number_format:number_format -> 'a t -> unit -> 'a fmt
 (** [pp_value t ()] formats the JSON representation of values as
     described by [t] by encoding it with {!Json.val-encode} and formatting
     it with {!pp_json'}. If the encoding of the value errors a JSON

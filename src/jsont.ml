@@ -1281,16 +1281,15 @@ let pp_bool = Fmt.json_bool
 let pp_string = Fmt.json_string
 let pp_number = Fmt.json_number
 let pp_number' = Fmt.json_number'
-let pp_json' ?(number_format = Fmt.json_default_number_format) () ppf j =
-  let pp_indent = 2 in
+let pp_json' ?(indent_size = 2) ?(number_format = Fmt.json_default_number_format) () ppf j =
   let pp_sep ppf () =
     Format.pp_print_char ppf ',';
-    Format.pp_print_break ppf 1 pp_indent
+    Format.pp_print_break ppf 1 indent_size
   in
   let rec pp_array ppf a =
     Format.pp_open_hovbox ppf 0;
     Format.pp_print_char ppf '[';
-    Format.pp_print_break ppf 0 pp_indent;
+    Format.pp_print_break ppf 0 indent_size;
     (Format.pp_print_list ~pp_sep pp_value) ppf a;
     Format.pp_print_break ppf 0 0;
     Format.pp_print_char ppf ']';
@@ -1302,7 +1301,7 @@ let pp_json' ?(number_format = Fmt.json_default_number_format) () ppf j =
   and pp_obj ppf o =
     Format.pp_open_hvbox ppf 0;
     Format.pp_print_char ppf '{';
-    Format.pp_print_break ppf 0 pp_indent;
+    Format.pp_print_break ppf 0 indent_size;
     (Format.pp_print_list ~pp_sep pp_mem) ppf o;
     Format.pp_print_break ppf 0 0;
     Format.pp_print_char ppf '}';
@@ -2053,6 +2052,6 @@ let set_path ?stub ?(allow_absent = false) t p v = match Path.rev_indices p with
 type format = Minify | Indent | Layout
 type number_format = Fmt.json_number_format
 let default_number_format = Fmt.json_default_number_format
-let pp_value ?number_format t () = fun ppf v -> match Json.encode t v with
-| Ok j ->  pp_json' ?number_format () ppf j
+let pp_value ?indent_size ?number_format t () = fun ppf v -> match Json.encode t v with
+| Ok j ->  pp_json' ?indent_size ?number_format () ppf j
 | Error e -> pp_string ppf e
