@@ -193,28 +193,32 @@ module Fmt = struct
 
   (* ANSI styling
 
-     Note this is the scheme we have in B0_std.Fmt but obviously
+     Note this is the scheme we have in More.Fmt but obviously
      we can't depend on it. For now we decided not to surface it
      at the library level. Ideally something should be provided
      upstream. *)
 
   type styler = Ansi | Plain
-  let styler' =
-    ref begin match Sys.getenv_opt "TERM" with
-    | None when Sys.backend_type = Other "js_of_ocaml" -> Ansi
-    | None | Some "dumb" -> Plain
-    | _ -> Ansi
-    end
 
-  let set_styler st = styler' := st
-  let styler () = !styler'
+  let styler' = Atomic.make @@
+    match Sys.getenv_opt "NO_COLOR" with
+    | Some s when s <> "" -> Plain
+    | _ ->
+        match Sys.getenv_opt "TERM" with
+        | Some "dumb" -> Plain
+        | None when Sys.backend_type <> Other "js_of_ocaml" -> Plain
+        | _ -> Ansi
+
+  let set_styler styler = Atomic.set styler' styler
+  let styler () = Atomic.get styler'
+
   let ansi_reset = "\x1B[0m"
   let bold ppf s =
-    if !styler' = Plain then string ppf s else
+    if Atomic.get styler' = Plain then string ppf s else
     pf ppf "@<0>%s%s@<0>%s" "\x1B[1m" s ansi_reset
 
   let bold_red ppf s =
-    if !styler' = Plain then string ppf s else
+    if Atomic.get styler' = Plain then string ppf s else
     pf ppf "@<0>%s%s@<0>%s" "\x1B[31;1m" s ansi_reset
 
   let code = bold
