@@ -998,6 +998,56 @@ module Object : sig
       A shortcut to represent optional members of type ['a] with ['a option]
       values. *)
 
+  module Syntax : sig
+    type ('o, 'a) schema
+    (** The type for mapping a member object to a value ['a] stored
+        in an OCaml value of type ['o]. *)
+
+    val define : ?kind:string -> ?doc:string -> ('o, 'o) schema -> 'o t
+    (** [define ?kind ?doc schema] is a JSON type for objects described by
+        [schema]. [kind] names the entities represented by the map and [doc]
+        documents them. Both default to [""].
+
+        Raises [Invalid_argument] if [schema] describes a member name more than
+        once. *)
+
+    val mem :
+      ?doc:string -> ?dec_absent:'a -> ?enc:('o -> 'a) ->
+      ?enc_omit:('a -> bool) -> string -> 'a t -> ('o, 'a) schema
+    (** [mem name t] is a member named [name] of type [t] for an object of
+        type ['o] being defined.
+        {ul
+        {- [doc] is a documentation string for the member. Defaults to [""].}
+        {- [dec_absent], if specified, is the value used for the decoding
+           direction when the member named [name] is missing. If unspecified
+           decoding errors when the member is absent. See also {!opt_mem}.
+        {- [enc] is used to project the member's value from the object
+           representation ['o] for encoding to JSON with [t]. It can be omitted
+           if the result is only used for decoding.}
+        {- [enc_omit] is for the encoding direction. If the member value
+           returned by [enc] returns [true] on [enc_omit], the member is omited
+           in the encoded JSON object. Defaults to [Fun.const false].}} *)
+
+    val opt_mem :
+      ?doc:string -> ?enc:('o -> 'a option) -> string -> 'a t ->
+      ('o, 'a option) schema
+    (** [opt_mem name t] is:
+    {[
+      let dec_absent = None and enc_omit = Option.is_none in
+      Jsont.Object.Syntax.mem name (Jsont.some t) map ~dec_absent ~enc_omit
+    ]}
+        A shortcut to represent optional members of type ['a] with ['a option]
+        values. *)
+
+    val ( let+ ) : ('o, 'a) schema -> ('a -> 'b) -> ('o, 'b) schema
+    (** [let+ v = schema in body] maps the member value [v] to [body]. *)
+
+    val ( and+ ) : ('o, 'a) schema -> ('o, 'b) schema -> ('o, 'a * 'b) schema
+    (** [let+ x = a and+ y = b in body] combines two (or more) schemas
+        [a] and [b] together, using [body] to join their member values
+        [x] and [y]. *)
+  end
+
   (** {1:cases Case objects}
 
       Read the {{!page-cookbook.cases}cookbook} on case objects. *)
@@ -1679,11 +1729,13 @@ module Repr : sig
     end
   end
 
-  type ('ret, 'f) dec_fun =
-  | Dec_fun : 'f -> ('ret, 'f) dec_fun
-    (** The function and its return type. *)
-  | Dec_app : ('ret, 'a -> 'b) dec_fun * 'a Type.Id.t -> ('ret, 'b) dec_fun
-    (** Application of an argument to a function witnessed by a type
+  type 'f dec_fun =
+  | Dec_fun : 'f -> 'f dec_fun
+    (** The function. *)
+  | Dec_app : ('a -> 'b) dec_fun * 'a dec_fun -> 'b dec_fun
+    (** Application of an argument to a function. *)
+  | Dec_arg : 'a Type.Id.t -> 'a dec_fun
+    (** An argument for a function witnessed by a type
         identifier. The type identifier can be used to lookup a value
         of the right type in an heterogenous dictionary. *)
   (** The type for decoding functions. *)
@@ -1757,8 +1809,8 @@ module Repr : sig
     (** The kind of JSON object (documentation). *)
     doc : string;
     (** A doc string for the JSON member. *)
-    dec : ('o, 'dec) dec_fun;
-    (** The object decoding function to construct an ['o] value. *)
+    dec : 'dec dec_fun;
+    (** The object decoding function to construct a ['dec] value. *)
     mem_decs : mem_dec String_map.t;
     (** [mem_decs] are the member decoders sorted by member name. *)
     mem_encs : 'o mem_enc list;
@@ -2025,7 +2077,7 @@ module Repr : sig
     val find : 'a Type.Id.t -> t -> 'a option
   end
 
-  val apply_dict : ('ret, 'f) dec_fun -> Dict.t -> 'f
+  val apply_dict : 'f dec_fun -> Dict.t -> 'f
   (** [apply_dict dec dict] applies [dict] to [f] in order to get the
       value ['f]. Raises [Invalid_argument] if [dict] has not all the
       type identifiers that [dec] needs. *)

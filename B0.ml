@@ -55,6 +55,10 @@ let cookbook =
 let trials =
   test ~/"test/trials.ml" ~run:false ~doc:"Experiments"
 
+let test_syntax =
+  test ~/"test/test_syntax.ml" ~run:false ~doc:"Test art-w's syntax performance"
+    ~requires:[jsont_bytesrw]
+
 let topojson =
   let doc = "Jsont modelling of TopoJSON" in
   let requires = [cmdliner; bytesrw; jsont_bytesrw] in
