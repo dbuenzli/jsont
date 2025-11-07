@@ -133,7 +133,7 @@ let expect =
   in
   let valid_files, invalid_files =
     let base_files = B0_expect.base_files ctx ~rel:true ~recurse:false in
-    let input f = Fpath.get_ext ~multi:true f = ".json" in
+    let input f = Fpath.take_ext ~multi:true f = ".json" in
     let files = List.filter input base_files in
     let is_valid f =
       not (String.starts_with ~prefix:"invalid" (Fpath.basename f))

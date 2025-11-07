@@ -24,7 +24,7 @@ let test_eod =
   let () = Result.get_ok (Jsont_bytesrw.encode' Jsont.bool true ~eod:false w) in
   let () = Result.get_ok (Jsont_bytesrw.encode' Jsont.bool true ~eod:true w) in
   Test.string (Buffer.contents b) "truetrue";
-  Snap.raise (fun () -> Jsont_bytesrw.encode' Jsont.bool true ~eod:true w) @@
+  Snap.raise (fun () -> Jsont_bytesrw.encode' Jsont.bool true ~eod:true w) @>
   __POS_OF__ (Invalid_argument("slice written after eod"));
   ()
 

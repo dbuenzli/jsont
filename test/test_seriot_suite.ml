@@ -46,7 +46,11 @@ let run ~dir ~show_errors =
     Ok 0
   end else
   let dir = Fpath.(dir / "test_parsing") in
-  let* files = Os.Dir.fold_files ~recurse:false Os.Dir.path_list dir [] in
+  let* files =
+    let dotfiles = false and follow_symlinks = true and recurse = false in
+    Os.Dir.fold_files
+      ~dotfiles ~follow_symlinks ~recurse Os.Dir.path_list dir []
+  in
   Result.ok @@ Test.main @@ fun () ->
   List.iter (fun file -> test ~show_errors file ()) files
 
