@@ -1064,7 +1064,26 @@ module Object = struct
     Object { mems with mem_encs = List.rev mems.mem_encs }
 
   let get_object_map = function
-  | Object map -> map | _ -> invalid_arg "Not an object"
+  | Object map -> Some map | _ -> None
+
+  (* Wrap a non-object type in a synthetic object with a "value" member *)
+  let wrap_in_value_object (type a) (t : a Repr.t) : (a, a) object_map =
+    let make v = v in
+    let value v = v in
+    let id = Type.Id.make () in
+    let mem_map = { name = "value"; doc = ""; type' = t; id;
+                    dec_absent = None; enc = value;
+                    enc_omit = Fun.const false } in
+    let mem_decs = String_map.singleton "value" (Mem_dec mem_map) in
+    let mem_encs = [Mem_enc mem_map] in
+    let dec = Dec_app (Dec_fun make, id) in
+    let shape = Object_basic Unknown_skip in
+    { kind = ""; doc = ""; dec; mem_decs; mem_encs; enc_meta = enc_meta_none; shape }
+
+  let get_or_wrap_object_map t =
+    match get_object_map t with
+    | Some map -> map
+    | None -> wrap_in_value_object t
 
   (* Members *)
 
@@ -1110,7 +1129,7 @@ module Object = struct
 
     let no_dec _ = Error.msgf Meta.none "No decoder for case"
     let map ?(dec = no_dec) tag obj =
-      { tag; object_map = get_object_map obj; dec; }
+      { tag; object_map = get_or_wrap_object_map obj; dec; }
 
     let map_tag c = c.tag
     let make c = Case c

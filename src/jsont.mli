@@ -1021,12 +1021,15 @@ module Object : sig
     val map :
       ?dec:('case -> 'cases) -> 'tag -> 'case jsont ->
       ('cases, 'case, 'tag) map
-    (** [map ~dec v obj] defines the object map [obj] as being the
-        case for the tag value [v] of the case member. [dec] indicates how to
-        inject the object case into the type common to all cases.
+    (** [map ~dec v t] defines the type [t] as being the case for the
+        tag value [v] of the case member. [dec] indicates how to inject
+        the case value into the type common to all cases.
 
-        Raises [Invalid_argument] if [obj] is not a direct result of
-        {!finish}, that is if [obj] does not describe an object. *)
+        If [t] is an object type (a direct result of {!finish}), its
+        members are merged into the parent object. Otherwise, [t] is
+        automatically wrapped in an object with a single ["value"] member.
+        For example, using [Jsont.int] as [t] will encode as
+        [{"type": "...", "value": 42}]. *)
 
     val map_tag : ('cases, 'case, 'tag) map -> 'tag
     (** [map_tag m] is [m]'s tag. *)
