@@ -1,3 +1,6 @@
+exited:2
+┌─ stdout:0
+┌─ stderr:313
 jsont: [31;1mError[0m: Expected [1mJSON value[0m but found [1m][0m
               File "invalid-array2.json", line 1, characters 7-8:
               File "invalid-array2.json", line 1, characters 7-8: at index [1m3[0m of

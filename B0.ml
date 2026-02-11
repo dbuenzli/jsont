@@ -85,6 +85,22 @@ let test_brr =
   let meta = B0_meta.(empty |> tag test) in
   B0_jsoo.html_page "test_brr" ~doc ~meta ~srcs ~requires
 
+let test_jsont_tool =
+  (* b0: TODO streamline this *)
+  let env env _ =
+    let* exe = B0_env.unit_exe_file env jsont_tool in
+    let env = B0_env.build_env env in
+    Ok (Os.Env.add "B0_TESTING_JSONT" (Fpath.to_string exe) env)
+  in
+  let meta =
+    B0_meta.empty
+    |> ~~ B0_unit.Action.env (`Fun (("testing-setup", env)))
+    |> ~~ B0_unit.Action.units [jsont_tool]
+  in
+  let doc = "Test jsont tool" in
+  let requires = [b0_std; jsont_bytesrw] in
+  test ~/"test/test_jsont_tool.ml" ~meta ~run:true ~requires ~doc
+
 (* Seriot JSON test suite *)
 
 let seriot_suite_repo = "https://github.com/nst/JSONTestSuite.git"
@@ -103,46 +119,6 @@ let test_seriot_suite =
   let doc = "Run the Seriot test suite" in
   let requires = [b0_std; cmdliner; jsont_bytesrw] in
   test ~/"test/test_seriot_suite.ml" ~doc ~requires
-
-(* Expectation tests *)
-
-let expect =
-  let doc = "Test jsont expectations" in
-  let meta = B0_meta.(empty |> tag test |> tag run) in
-  B0_unit.of_action' "expect" ~meta ~units:[jsont_tool] ~doc @@
-  B0_expect.action_func ~base:(Fpath.v "test/expect") @@ fun ctx ->
-  let jsont = B0_expect.get_unit_exe_file_cmd ctx jsont_tool in
-  let expect_valid_file ctx json file =
-    let runs = (* command, output suffix *)
-      [ Cmd.(arg "fmt" % "-fpretty"), ".pretty.json";
-        Cmd.(arg "fmt" % "-findent"), ".indent.json";
-        Cmd.(arg "fmt" % "-fminify"), ".minify.json";
-        Cmd.(arg "fmt" % "-fpreserve"), ".layout.json";
-        Cmd.(arg "locs"), ".locs" ]
-    in
-    let test_run ctx jsont file (cmd, ext) =
-      let cmd = Cmd.(cmd %% path file) in
-      let cwd = B0_expect.base ctx and stdout = Fpath.(file -+ ext) in
-      B0_expect.stdout ctx ~cwd ~stdout Cmd.(jsont %% cmd)
-    in
-    List.iter (test_run ctx json file) runs
-  in
-  let expect_invalid_file ctx jsont file =
-    let cwd = B0_expect.base ctx and stderr = Fpath.(file -+ ".stderr") in
-    B0_expect.stderr ctx ~cwd ~stderr Cmd.(jsont % "fmt" %% path file)
-  in
-  let valid_files, invalid_files =
-    let base_files = B0_expect.base_files ctx ~rel:true ~recurse:false in
-    let input f = Fpath.take_ext ~multi:true f = ".json" in
-    let files = List.filter input base_files in
-    let is_valid f =
-      not (String.starts_with ~prefix:"invalid" (Fpath.basename f))
-    in
-    List.partition is_valid files
-  in
-  List.iter (expect_valid_file ctx jsont) valid_files;
-  List.iter (expect_invalid_file ctx jsont) invalid_files;
-  ()
 
 (* Paper *)
 

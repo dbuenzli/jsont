@@ -1,2 +1,5 @@
+exited:2
+┌─ stdout:0
+┌─ stderr:142
 jsont: [31;1mError[0m: Expected [1mobject member[0m but found [1m}[0m
               File "invalid-obj2.json", line 1, characters 12-13:
