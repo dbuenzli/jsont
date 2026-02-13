@@ -15,59 +15,55 @@ let status_of_filename name =
   if String.starts_with ~prefix:"i_" name then `Indeterminate else
   Test.failstop "Unknown kind of test: %s" name
 
-let test ~show_errors file =
-  let name = Fpath.basename file in
-  Test.test name @@ fun () ->
-  Test.noraise ~__POS__ @@ fun () ->
-  Result.get_ok' @@
+let args = Test.Arg.make ()
+
+let test_file ~show_errors file =
+  Test.error_to_fail @@
   let* json = Os.File.read file in
+  let name = Fpath.basename file in
   let status = status_of_filename name in
   let file = Fpath.to_string file in
   match Jsont_bytesrw.decode_string ~file ~locs:true Jsont.json json with
   | Ok _ ->
-      if status = `Accept || status = `Indeterminate
-      then Ok ()
-      else (Test.failstop " @[<v>Should have been rejected:@,%s@]" json)
+      if status = `Accept || status = `Indeterminate then Ok (Test.pass ()) else
+      Fmt.error "@[<v>Test %s@,Should have been rejected:@,%s@]" name json
   | Error e ->
-      if show_errors then Log.err (fun m -> m "%s" e);
-      if status = `Reject || status = `Indeterminate
-      then Ok ()
-      else (Test.failstop " @[<v>Should have been accepted:@,%s@]" json)
+      if show_errors then Test.Log.msg "@[<v>Test %s@,%s@]" name e;
+      if status = `Reject || status = `Indeterminate then Ok (Test.pass ()) else
+      Fmt.error "@[<v>Test %s@,Should have been accepted:@,%s@]" name json
 
-let run ~dir ~show_errors =
-  let dir = Fpath.v dir in
-  Log.if_error ~use:1 @@
+let test =
+  Test.test' args "test_parsing tests" @@ fun (show_errors, test_files) ->
+  Test.block ~kind:"test file" @@ fun () ->
+  List.iter (test_file ~show_errors) test_files
+
+let get_test_files dir =
   let* exists = Os.Dir.exists dir in
-  if not exists
-  then begin
-    Fmt.pr "@[%a @[<v>JSONTestSuite not found@,\
-            Use %a to download it@]@]" Test.Fmt.skip ()
-      Fmt.code "b0 -- download-seriot-suite";
-    Ok 0
-  end else
+  if not exists then
+    Fmt.error
+      "@[%a @[<v>JSONTestSuite not found@,Use %a to download it@]@]"
+      Test.Fmt.skip () Fmt.code "b0 -- download-seriot-suite"
+  else
   let dir = Fpath.(dir / "test_parsing") in
-  let* files =
-    let dotfiles = false and follow_symlinks = true and recurse = false in
-    Os.Dir.fold_files
-      ~dotfiles ~follow_symlinks ~recurse Os.Dir.path_list dir []
-  in
-  Result.ok @@ Test.main @@ fun () ->
-  List.iter (fun file -> test ~show_errors file ()) files
+  let dotfiles = false and follow_symlinks = true and recurse = false in
+  Os.Dir.contents ~kind:`Files ~dotfiles ~follow_symlinks ~recurse dir
 
 open Cmdliner
 open Cmdliner.Term.Syntax
 
-let cmd =
-  let doc = "Run Nicolas Seriot's JSON test suite" in
-  Cmd.v (Cmd.info "test_seriot_suite" ~doc) @@
+let main () =
+  Test.main' @@
   let+ show_errors =
     let doc = "Show errors" in
     Arg.(value & flag & info ["e"; "show-errors"] ~doc)
   and+ dir =
     let doc = "Repository directory of the test suite." in
-    Arg.(value & pos 0 dir "tmp/JSONTestSuite" & info [] ~doc ~docv:"REPO")
+    let default = Fpath.v "../tmp/JSONTestSuite" in
+    Arg.(value & opt B0_std_cli.dirpath default & info ["repo-dir"] ~doc)
   in
-  run ~dir ~show_errors
+  fun () ->
+    let dir = Fpath.(Test.dir () // dir) in
+    let files = get_test_files dir |> Test.error_to_failstop in
+    Test.autorun ~args:Test.Arg.[value args (show_errors, files)] ()
 
-let main () = Cmd.eval' cmd
 let () = if !Sys.interactive then () else exit (main ())
