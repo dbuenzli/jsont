@@ -28,7 +28,7 @@ File "doc.json", lines 1-10, characters 0-1
   Member [1m"other"[0m:
   File "doc.json", line 6, characters 2-9
   Array:
-  File "doc.json", line 6, characters 11-105
+  File "doc.json", line 6, characters 11-108
     Object:
     File "doc.json", line 6, characters 12-22
       Member [1m"a"[0m:
@@ -37,53 +37,53 @@ File "doc.json", lines 1-10, characters 0-1
       File "doc.json", line 6, characters 19-20
       
     Object:
-    File "doc.json", line 6, characters 25-34
-      Member [1m"a"[0m:
-      File "doc.json", line 6, characters 26-29
+    File "doc.json", line 6, characters 25-37
+      Member [1m"🐫"[0m:
+      File "doc.json", line 6, characters 26-32
       Number [1m2[0m:
-      File "doc.json", line 6, characters 31-32
+      File "doc.json", line 6, characters 34-35
       
     Object:
-    File "doc.json", line 6, characters 38-47
+    File "doc.json", line 6, characters 41-50
       Member [1m"a"[0m:
-      File "doc.json", line 6, characters 39-42
+      File "doc.json", line 6, characters 42-45
       Number [1m3[0m:
-      File "doc.json", line 6, characters 44-45
+      File "doc.json", line 6, characters 47-48
       
     Object:
-    File "doc.json", line 6, characters 49-58
+    File "doc.json", line 6, characters 52-61
       Member [1m"a"[0m:
-      File "doc.json", line 6, characters 50-53
+      File "doc.json", line 6, characters 53-56
       Number [1m4[0m:
-      File "doc.json", line 6, characters 55-56
+      File "doc.json", line 6, characters 58-59
       
     Object:
-    File "doc.json", line 6, characters 60-69
+    File "doc.json", line 6, characters 63-72
       Member [1m"a"[0m:
-      File "doc.json", line 6, characters 61-64
+      File "doc.json", line 6, characters 64-67
       Number [1m5[0m:
-      File "doc.json", line 6, characters 66-67
+      File "doc.json", line 6, characters 69-70
       
     Object:
-    File "doc.json", line 6, characters 71-80
+    File "doc.json", line 6, characters 74-83
       Member [1m"a"[0m:
-      File "doc.json", line 6, characters 72-75
+      File "doc.json", line 6, characters 75-78
       Number [1m6[0m:
-      File "doc.json", line 6, characters 77-78
+      File "doc.json", line 6, characters 80-81
       
     Object:
-    File "doc.json", line 6, characters 82-89
+    File "doc.json", line 6, characters 85-92
       Member [1m"a"[0m:
-      File "doc.json", line 6, characters 83-86
+      File "doc.json", line 6, characters 86-89
       Number [1m7[0m:
-      File "doc.json", line 6, characters 87-88
+      File "doc.json", line 6, characters 90-91
       
     Object:
-    File "doc.json", line 6, characters 91-104
+    File "doc.json", line 6, characters 94-107
       Member [1m"hu"[0m:
-      File "doc.json", line 6, characters 92-96
+      File "doc.json", line 6, characters 95-99
       [1mnull[0m:
-      File "doc.json", line 6, characters 97-101
+      File "doc.json", line 6, characters 100-104
       
   Member [1m"metameta"[0m:
   File "doc.json", line 7, characters 2-12
