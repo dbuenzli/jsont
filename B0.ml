@@ -78,6 +78,11 @@ let test_jsont =
   let requires = [b0_std; jsont_bytesrw] in
   test ~/"test/test_json.ml" ~run:true ~srcs ~requires ~doc
 
+let test_jsont_types =
+  let doc = "Test Jsont.* types" in
+  let requires = [b0_std; jsont_bytesrw] in
+  test ~/"test/test_jsont_types.ml" ~run:true ~requires ~doc
+
 let test_brr =
   let doc = "Test Jsont_brr codec in the browser" in
   let srcs = `File ~/"test/test_brr.ml" :: test_common in
