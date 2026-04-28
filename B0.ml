@@ -70,13 +70,13 @@ let test_bytesrw =
   let doc = "Test Jsont_bytesrw codec" in
   let srcs = test_common in
   let requires = [b0_std; jsont_bytesrw] in
-  test ~/"test/test_bytesrw.ml" ~run:true ~srcs ~requires ~doc
+  test ~/"test/test_jsont_bytesrw.ml" ~run:true ~srcs ~requires ~doc
 
 let test_jsont =
   let doc = "Test Jsont.Json codec" in
   let srcs = test_common in
   let requires = [b0_std; jsont_bytesrw] in
-  test ~/"test/test_json.ml" ~run:true ~srcs ~requires ~doc
+  test ~/"test/test_jsont_json.ml" ~run:true ~srcs ~requires ~doc
 
 let test_jsont_types =
   let doc = "Test Jsont.* types" in
@@ -85,10 +85,10 @@ let test_jsont_types =
 
 let test_brr =
   let doc = "Test Jsont_brr codec in the browser" in
-  let srcs = `File ~/"test/test_brr.ml" :: test_common in
+  let srcs = `File ~/"test/test_jsont_brr.ml" :: test_common in
   let requires = [b0_std; brr; jsont; jsont_brr] in
   let meta = B0_meta.(empty |> tag test) in
-  B0_jsoo.html_page "test_brr" ~doc ~meta ~srcs ~requires
+  B0_jsoo.html_page "test_jsont_brr" ~doc ~meta ~srcs ~requires
 
 let test_jsont_tool =
   (* b0: TODO streamline this *)
