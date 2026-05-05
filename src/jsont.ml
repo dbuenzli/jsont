@@ -1418,6 +1418,16 @@ module Json = struct
       if String.equal n n' then Some m else find_mem n ms
 
   let find_mem' (n, _) ms = find_mem n ms
+  let remove_mem n ms =
+    let rec loop ms n acc = function
+    | [] -> ms
+    | ((n', _), _ as m) :: rest ->
+        if String.equal n n' then List.rev_append acc rest else
+        loop ms n (m :: acc) rest
+    in
+    loop ms n [] ms
+
+  let remove_mem' (n, _) ms = remove_mem n ms
   let object_names mems = List.map (fun ((n, _), _) -> n) mems
   let object_names' mems = List.map fst mems
 

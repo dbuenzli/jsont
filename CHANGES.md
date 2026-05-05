@@ -1,3 +1,6 @@
+
+- Add `Jsont.Json.remove_mem[']`
+
 v0.2.0 2025-07-25 Zagreb
 ------------------------
 

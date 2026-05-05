@@ -1375,6 +1375,13 @@ module Json : sig
   val find_mem' : name -> object' -> mem option
   (** [find_mem n ms] is [find_mem (fst n) ms]. *)
 
+  val remove_mem : string -> object' -> object'
+  (** [remove_mem n ms] removes the first member whose name matches [n] in
+      [ms]. The order is perserved. *)
+
+  val remove_mem' : name -> object' -> object'
+  (** [remove_mem' n ms] is [remove_mem (fst n) ms]. *)
+
   val object_names : object' -> string list
   (** [object_names ms] are the names of [ms]. *)
 
