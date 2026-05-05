@@ -661,6 +661,18 @@ fun d map umems cases mem_miss mem_decs delay dict ->
         in
         Dict.add cases.id (case.dec (apply_dict case.object_map.dec dict)) dict
   in
+  (* First check if the tag is not in the delayed members *)
+  match Jsont.Json.find_mem cases.tag.name delay with
+  | Some ((_, meta as name), v) ->
+      let delay = Jsont.Json.remove_mem cases.tag.name delay in
+      let type' = Jsont.Repr.unsafe_to_t cases.tag.type' in
+      let tag = match Jsont.Json.decode' type' v with
+      | Ok v -> v
+      | Error e -> Jsont.Repr.error_push_object (error_meta d) map name e
+      in
+      decode_case_tag
+        ~sep:false map umems cases mem_miss mem_decs meta tag delay
+  | None ->
   match d.u with
   | 0x007D (* } *) ->
       (match cases.tag.dec_absent with

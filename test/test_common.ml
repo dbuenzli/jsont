@@ -642,6 +642,11 @@ let test_path_queries =
     v v ~__POS__;
   ()
 
+let test_out_of_order_nested_case =
+  Test.test "Out of order nested case (#14)" @@ fun () ->
+  trip Nested_case_member.jsont Nested_case_member.out_of_order;
+  ()
+
 let tests () =
   test_basic_invalid ();
   test_null ();
@@ -662,4 +667,5 @@ let tests () =
   test_array_queries ();
   test_object_queries ();
   test_path_queries ();
+  test_out_of_order_nested_case ();
   ()

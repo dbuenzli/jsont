@@ -1,5 +1,6 @@
 
 - Add `Jsont.Json.remove_mem[']`
+- Fix nested out-of-order case member decodes (#14)
 
 v0.2.0 2025-07-25 Zagreb
 ------------------------

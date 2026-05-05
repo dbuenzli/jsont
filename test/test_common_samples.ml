@@ -412,3 +412,52 @@ module Tree_data = struct
                     "value": 4,
                     "right": { "type" : "empty" }}} |}
 end
+
+
+module Nested_case_member = struct
+
+  type sub = C of int | D of int
+
+  type super =
+  | A of sub
+  | B of int
+
+  let base name =
+    Jsont.Object.map ~kind:name Fun.id
+    |> Jsont.Object.mem (name ^ "-data") Jsont.int ~enc:Fun.id
+    |> Jsont.Object.finish
+
+  let jsont =
+    let a_jsont =
+      let c_jsont = base "c" in
+      let d_jsont = base "d" in
+      let case_c = Jsont.Object.Case.map "c" c_jsont ~dec:(fun c -> C c) in
+      let case_d = Jsont.Object.Case.map "d" d_jsont ~dec:(fun c -> D c) in
+      let cases = Jsont.Object.Case.[make case_c; make case_d] in
+      let enc_case = function
+      | C c -> Jsont.Object.Case.value case_c c
+      | D d -> Jsont.Object.Case.value case_d d
+      in
+      Jsont.Object.map ~kind:"sub" Fun.id
+      |> Jsont.Object.case_mem
+        "subtype" Jsont.string cases ~enc:Fun.id ~enc_case ~tag_to_string:Fun.id
+      |> Jsont.Object.finish
+    in
+    let b_jsont = base "b" in
+    let case_a = Jsont.Object.Case.map "a" a_jsont ~dec:(fun sub -> A sub) in
+    let case_b = Jsont.Object.Case.map "b" b_jsont ~dec:(fun b -> B b) in
+    let cases = Jsont.Object.Case.[make case_a; make case_b] in
+    let enc_case = function
+    | A a -> Jsont.Object.Case.value case_a a
+    | B b -> Jsont.Object.Case.value case_b b
+    in
+    Jsont.Object.map ~kind:"super" Fun.id
+    |> Jsont.Object.case_mem
+      "type" Jsont.string cases ~enc:Fun.id ~enc_case ~tag_to_string:Fun.id
+    |> Jsont.Object.finish
+
+  let out_of_order =
+    {| { "subtype": "c",
+         "c-data": 3,
+         "type": "a" } |}
+end
