@@ -67,9 +67,9 @@ non-finite one. This has the following consequences.
 {2:integer_numbers Integer numbers}
 
 For representing integers by JSON numbers one is limited to the range
-\[-2{^53};2{^53}\] which are the only integers represented
-precisely in IEEE 754 [binary64]. If you want to serialize numbers
-beyond this range you need to represent them by a JSON string. These
+\[-2{^53}+1;2{^53}-1\] which are the only integers represented
+exactly and unambigously in IEEE 754 [binary64]. If you want to serialize
+numbers beyond this range you need to represent them by a JSON string. These
 scheme can be seen in the wild:
 {ul
 {- Integers are unconditionally represented by strings. In this case

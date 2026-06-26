@@ -1,6 +1,25 @@
 
 - Add `Jsont.Json.remove_mem[']`
 - Fix nested out-of-order case member decodes (#14)
+- Fix `Jsont.{int,int64}`. The range in which numbers are codec by a JSON
+  number is changed from `[-2^53;2^53]` to `[-2^53+1;2^53-1]` which is the
+  correct range for reliable integer interchange.
+
+  While `2^53` is the maximal integer that can be represented
+  exactly, it is ambiguous as it shares its representation with
+  `2^53+1`. Data encoded with `jsont` would not encode `2^53+1` as a
+  number but as a string. However if you deal with non `jsont`
+  generated data the JSON number `2^53+1` was read as `2^53` instead
+  of erroring (because we convert from the float representation).  The
+  new behaviour entails that both `-2^53` and `2^53` values that you
+  may have encoded with `Jsont.{int,int64}` will not parse back as
+  they are now expected to be encoded by a string instead of a number.
+
+  You can use `Jsont.legacy_{int,int64}` to migrate your data, the
+  decoding works as before (and thus remains wrong if they hit JSON numbers
+  `-2^52-1` and `2^53+1` by silently inputing them as `-2^52` and
+  `2^53` instead of erroring) but the encoding uses the new
+  range. Thanks to Thomas Gazagnaire for the report (#18).
 
 v0.2.0 2025-07-25 Zagreb
 ------------------------

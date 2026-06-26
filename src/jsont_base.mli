@@ -148,12 +148,14 @@ module Number : sig
   val can_store_exact_int : int -> bool
   val can_store_exact_int64 : Int64.t -> bool
   val in_exact_int_range : float -> bool
+  val legacy_in_exact_int_range : float -> bool
   val in_exact_uint8_range : float -> bool
   val in_exact_uint16_range : float -> bool
   val in_exact_int8_range : float -> bool
   val in_exact_int16_range : float -> bool
   val in_exact_int32_range : float -> bool
   val in_exact_int64_range : float -> bool
+  val legacy_in_exact_int64_range : float -> bool
 end
 
 (** See {!Jsont.Path} *)

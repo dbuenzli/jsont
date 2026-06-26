@@ -37,7 +37,7 @@
   but may still be useful}
 \cpr{Daniel C. Bünzli}
 \doival{xx.xxxx/xxxxx Document style kept for now, because layout
-  was tailored for it. revision 1}
+  was tailored for it. revision 2}
 
 \newcommand{\thetitle}{An alphabet for your data soups}
 
@@ -299,7 +299,7 @@ integers with \json{} you need to encode them in strings.%%
 \footnote{Again, interoperable \json{} implementations map
 \json{} numbers to \textsc{ieee} 754 \code{binary64} values. Hence the
 only integers that can be interchanged safely without precision loss
-are those in the range $[-2^{53};2^{53}]$.}
+are those in the range $[-2^{53}+1;2^{53}-1]$.}
 
 \subsection{Map case}
 \label{sec:map_case}

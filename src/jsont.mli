@@ -683,18 +683,25 @@ val int32 : int32 t
     on the [int32] range, otherwise the decoder errors. *)
 
 val int64 : int64 t
-(** [int] maps truncated JSON numbers or JSON strings to 64-bit
+(** [int64] maps truncated JSON numbers or JSON strings to 64-bit
     integers.
     {ul
     {- JSON numbers are sucessfully decoded if after truncation they can
-       be represented on the [int64] range, otherwise the decoder
-       errors. [int64] values are encoded as JSON numbers if the
-       integer is in the \[-2{^53};2{^53}\] range.}
-    {- JSON strings are decoded using {!int_of_string_opt}, this
+       be represented on the [int64] range unambiguously, otherwise the
+       decoder errors. [int64] values are encoded as JSON numbers if the
+       integer is in the \[-2{^53}+1;2{^53}-1\] range.}
+    {- JSON strings are decoded using {!Int64.of_string_opt}, this
        allows binary, octal, decimal and hex syntaxes and errors on
-       overflow and syntax errors. [int] values are encoded as JSON
-       strings with {!Int.to_string} when the integer is outside the
-       \[-2{^53};2{^53}\] range}} *)
+       overflow and syntax errors. [int64] values are encoded as JSON
+       strings with {!Int64.to_string} when the integer is outside the
+       \[-2{^53}+1;2{^53}-1\] range}}
+
+    {b Warning} Before version [0.2.0] the range used for codecing
+    as numbers was \[2{^53}+1;2{^53}\] which is
+    {{:https://github.com/dbuenzli/jsont/issues/18}wrong} for reliable
+    integer interchange. If you have encoded the numbers -2{^53} and
+    2{^53}, those will no longer parse back. You can use {!legacy_int64}
+    to decode them as numbers or string and encode them correctly as strings. *)
 
 val int64_as_string : int64 t
 (** [int64_as_string] maps JSON strings to 64-bit integers. On decodes
@@ -706,17 +713,24 @@ val int : int t
 (** [int] maps truncated JSON numbers or JSON strings to [int] values.
     {ul
     {- JSON numbers are sucessfully decoded if after truncation they can
-       be represented on the [int] range, otherwise the decoder
+       be represented on the [int] range unambiguously otherwise the decoder
        errors. [int] values are encoded as JSON numbers if the
-       integer is in the \[-2{^53};2{^53}\] range.}
+       integer is in the \[-2{^53}+1;2{^53}-1\] range.}
     {- JSON strings are decoded using {!int_of_string_opt}, this
        allows binary, octal, decimal and hex syntaxes and errors on
        overflow and syntax errors. [int] values are encoded as JSON
        strings with {!Int.to_string} when the integer is outside the
-       \[-2{^53};2{^53}\] range}}
+       \[-2{^53}+1;2{^53}-1\] range}}
 
     {b Warning.} The behaviour of this function is platform
-    dependent, it depends on the value of {!Sys.int_size}. *)
+    dependent, it depends on the value of {!Sys.int_size}.
+
+    {b Warning} Before version [0.2.0] the range used for codecing
+    as numbers was \[-2{^53};2{^53}\] which is
+    {{:https://github.com/dbuenzli/jsont/issues/18}wrong} for reliable
+    integer interchange. If you have encoded the numbers -2{^53} and
+    2{^53}, those will no longer parse back. You can use {!legacy_int}
+    to decode them as numbers or string and encode them correctly as strings. *)
 
 val int_as_string : int t
 (** [int_as_string] maps JSON strings to [int] values. On
@@ -726,6 +740,16 @@ val int_as_string : int t
 
     {b Warning.} The behaviour of this function is platform
     dependent, it depends on the value of {!Sys.int_size}. *)
+
+val legacy_int64 : int64 t
+(** [legacy_int64] should only be used for migrating data in which the values
+    -2{^53} and 2{^53} were encoded with {!int64} before version
+    0.2.0. See the warning in {!int64}. *)
+
+val legacy_int : int t
+(** [legacy_int] should only be used for migrating data in which the values
+    -2{^53} and 2{^53} values were encoded with {!int} before version
+    0.2.0. See the warning in {!int}. *)
 
 (** {2:enums Strings and enums}
 

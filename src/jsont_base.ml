@@ -484,15 +484,20 @@ type 'a node = 'a * Meta.t
 
 module Number = struct
   let number_contains_int = Sys.int_size <= 53
-  let min_exact_int = if number_contains_int then Int.min_int else -(1 lsl 53)
-  let max_exact_int = if number_contains_int then Int.max_int else 1 lsl 53
+
+  let min_exact_int =
+    if number_contains_int then Int.min_int else -(1 lsl 53) + 1
+
+  let max_exact_int =
+    if number_contains_int then Int.max_int else (1 lsl 53) - 1
+
   let min_exact_uint8 = 0 let max_exact_uint8 = 255
   let min_exact_uint16 = 0 let max_exact_uint16 = 65535
   let min_exact_int8 = -128 let max_exact_int8 = 127
   let min_exact_int16 = -32768 let max_exact_int16 = 32767
   let min_exact_int32 = Int32.min_int let max_exact_int32 = Int32.max_int
-  let max_exact_int64 = Int64.shift_left 1L 53
-  let min_exact_int64 = Int64.neg max_exact_int64
+  let min_exact_int64 = Int64.(add (neg (shift_left 1L 53)) 1L)
+  let max_exact_int64 = Int64.(sub (shift_left 1L 53) 1L)
 
   let[@inline] int_is_uint8 v = v land (lnot 0xFF) = 0
   let[@inline] int_is_uint16 v = v land (lnot 0xFFFF) = 0
@@ -507,6 +512,9 @@ module Number = struct
 
   let max_exact_int_float = Int.to_float max_exact_int
   let min_exact_int_float = Int.to_float min_exact_int
+  let legacy_max_exact_int_float = Int.to_float (max_exact_int + 1)
+  let legacy_min_exact_int_float = Int.to_float (min_exact_int - 1)
+
   let max_exact_uint8_float = Int.to_float max_exact_uint8
   let min_exact_uint8_float = Int.to_float min_exact_uint8
   let max_exact_uint16_float = Int.to_float max_exact_uint16
@@ -519,9 +527,14 @@ module Number = struct
   let min_exact_int32_float = Int32.to_float min_exact_int32
   let max_exact_int64_float = Int64.to_float max_exact_int64
   let min_exact_int64_float = Int64.to_float min_exact_int64
+  let legacy_max_exact_int64_float = Int64.(to_float (add max_exact_int64 1L))
+  let legacy_min_exact_int64_float = Int64.(to_float (sub min_exact_int64 1L))
 
   let[@inline] in_exact_int_range v =
     min_exact_int_float <= v && v <= max_exact_int_float
+
+  let[@inline] legacy_in_exact_int_range v =
+    legacy_min_exact_int_float <= v && v <= legacy_max_exact_int_float
 
   let[@inline] in_exact_uint8_range v =
     min_exact_uint8_float <= v && v <= max_exact_uint8_float
@@ -540,6 +553,9 @@ module Number = struct
 
   let[@inline] in_exact_int64_range v =
     min_exact_int64_float <= v && v <= max_exact_int64_float
+
+  let[@inline] legacy_in_exact_int64_range v = (* wrong behaviour <= 0.2.0 *)
+    legacy_min_exact_int64_float <= v && v <= legacy_max_exact_int64_float
 end
 
 (* JSON Paths *)

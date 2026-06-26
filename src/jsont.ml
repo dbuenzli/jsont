@@ -736,13 +736,24 @@ let int64_number =
   in
   Base.number (Base.map ~kind ~dec ~enc:Int64.to_float ())
 
-let int64 =
-  let dec_number = int64_number and dec_string = int64_as_string in
+let legacy_int64_number = (* to decode encodes made with <= 0.2.0  *)
+  let kind = "int64" in
+  let dec meta v =
+    if Jsont_base.Number.legacy_in_exact_int64_range v
+    then Int64.of_float v
+    else Error.number_range meta ~kind v
+  in
+  Base.number (Base.map ~kind ~dec ~enc:Int64.to_float ())
+
+let int64 ~dec_number =
   let enc v =
     if Jsont_base.Number.can_store_exact_int64 v then int64_number else
     int64_as_string
   in
-  any ~kind:"int64" ~dec_number ~dec_string ~enc ()
+  any ~kind:"int64" ~dec_number ~dec_string:int64_as_string ~enc ()
+
+let legacy_int64 = int64 ~dec_number:legacy_int64_number
+let int64 = int64 ~dec_number:int64_number
 
 let int_as_string =
   let kind = "OCaml int" in
@@ -761,13 +772,23 @@ let int_number =
   in
   Base.number (Base.map ~kind ~dec ~enc:Int.to_float ())
 
-let int =
+let legacy_int_number = (* to decode encodes made with <= 0.2.0  *)
+  let kind = "OCaml int" in
+  let dec meta v =
+    if Jsont_base.Number.legacy_in_exact_int_range v then Int.of_float v else
+    Error.number_range meta ~kind v
+  in
+  Base.number (Base.map ~kind ~dec ~enc:Int.to_float ())
+
+let int ~dec_number =
   let enc v =
     if Jsont_base.Number.can_store_exact_int v then int_number else
     int_as_string
   in
-  let dec_number = int_number and dec_string = int_as_string in
-  any ~kind:"OCaml int" ~dec_number ~dec_string ~enc ()
+  any ~kind:"OCaml int" ~dec_number ~dec_string:int_as_string ~enc ()
+
+let legacy_int = int ~dec_number:legacy_int_number
+let int = int ~dec_number:int_number
 
 (* String and enums *)
 

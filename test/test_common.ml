@@ -281,12 +281,16 @@ let test_ints =
   trip Jsont.int32 "-2147483648" ~value:Int32.min_int ~__POS__;
   trip Jsont.int32 "2147483647" ~value:Int32.max_int ~__POS__;
   (* int64 *)
-  let max_exact = Int64.shift_left 1L 53 in
+  let max_exact = Int64.(sub (shift_left 1L 53) 1L) in
   let max_exact_next = Int64.(add max_exact 1L) in
-  let min_exact = Int64.shift_left 1L 53 in
-  let min_exact_prev = Int64.(add max_exact 1L) in
+  let min_exact = Int64.(add (neg (shift_left 1L 53)) 1L) in
+  let min_exact_prev = Int64.(sub min_exact 1L) in
   decode_error Jsont.int64 "null" ~__POS__;
   decode_error Jsont.int64 "true" ~__POS__;
+  decode_error Jsont.int64 "9007199254740993" ~__POS__;
+  decode_error Jsont.int64 "-9007199254740993" ~__POS__;
+  decode_error Jsont.int64 "9007199254740992" ~__POS__;
+  decode_error Jsont.int64 "-9007199254740992" ~__POS__;
   trip Jsont.int64 (Fmt.str "%Ld" max_exact)  ~value:max_exact ~__POS__;
   trip Jsont.int64 (Fmt.str "%Ld" min_exact)  ~value:min_exact ~__POS__;
   trip Jsont.int64
@@ -304,6 +308,26 @@ let test_ints =
     (Fmt.str {|"%Ld"|} Int64.max_int) ~value:Int64.max_int ~__POS__;
   trip Jsont.int64_as_string
     (Fmt.str {|"%Ld"|} Int64.min_int) ~value:Int64.min_int ~__POS__;
+  (* Legacy stuff for behaviour on version <= 0.2.0  *)
+  let eq = Test.T.int64 in
+  let legacy_max_exact = Int64.(shift_left 1L 53) in
+  let legacy_min_exact = Int64.neg legacy_max_exact in
+  decode_ok ~eq Jsont.legacy_int64 "9007199254740992" ~value:legacy_max_exact;
+  decode_ok ~eq Jsont.legacy_int64 "-9007199254740992" ~value:legacy_min_exact;
+  encode_ok Jsont.legacy_int64 ~value:legacy_max_exact {|"9007199254740992"|};
+  encode_ok Jsont.legacy_int64 ~value:legacy_min_exact {|"-9007199254740992"|};
+  decode_ok   (* Formally not ok but it is what is it *)
+    ~eq Jsont.legacy_int64 "9007199254740993"
+    ~value:legacy_max_exact ~__POS__;
+  decode_ok
+    ~eq Jsont.legacy_int64 {|"9007199254740993"|}
+    ~value:(Int64.add legacy_max_exact 1L) ~__POS__;
+  decode_ok   (* Formally not ok but it is what is it *)
+    ~eq Jsont.legacy_int64 "-9007199254740993"
+    ~value:legacy_min_exact ~__POS__;
+  decode_ok
+    ~eq Jsont.legacy_int64 {|"-9007199254740993"|}
+    ~value:(Int64.sub legacy_min_exact 1L) ~__POS__;
   ()
 
 let test_floats =
