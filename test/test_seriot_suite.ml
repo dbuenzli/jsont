@@ -20,9 +20,9 @@ let args = Test.Arg.make ()
 let test_file ~show_errors file =
   Test.error_to_fail @@
   let* json = Os.File.read file in
-  let name = Fpath.basename file in
+  let name = Filepath.basename file in
   let status = status_of_filename name in
-  let file = Fpath.to_string file in
+  let file = Filepath.to_string file in
   match Jsont_bytesrw.decode_string ~file ~locs:true Jsont.json json with
   | Ok _ ->
       if status = `Accept || status = `Indeterminate then Ok (Test.pass ()) else
@@ -44,7 +44,7 @@ let get_test_files dir =
       "@[%a @[<v>JSONTestSuite not found@,Use %a to download it@]@]"
       Test.Fmt.skip () Fmt.code "b0 -- download-seriot-suite"
   else
-  let dir = Fpath.(dir / "test_parsing") in
+  let dir = Filepath.(dir / "test_parsing") in
   let dotfiles = false and follow_symlinks = true and recurse = false in
   Os.Dir.contents ~kind:`Files ~dotfiles ~follow_symlinks ~recurse dir
 
@@ -58,11 +58,11 @@ let main () =
     Arg.(value & flag & info ["e"; "show-errors"] ~doc)
   and+ dir =
     let doc = "Repository directory of the test suite." in
-    let default = Fpath.v "../tmp/JSONTestSuite" in
-    Arg.(value & opt B0_std_cli.dirpath default & info ["repo-dir"] ~doc)
+    let default = Filepath.v "../tmp/JSONTestSuite" in
+    Arg.(value & opt B0_std_cli.dir default & info ["repo-dir"] ~doc)
   in
   fun () ->
-    let dir = Fpath.(Test.dir () // dir) in
+    let dir = Filepath.(Test.dir () // dir) in
     let files = get_test_files dir |> Test.error_to_failstop in
     Test.autorun ~args:Test.Arg.[value args (show_errors, files)] ()
 

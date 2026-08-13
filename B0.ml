@@ -95,7 +95,7 @@ let test_jsont_tool =
   let env env _ =
     let* exe = B0_env.unit_exe_file env jsont_tool in
     let env = B0_env.build_env env in
-    Ok (Os.Env.add "B0_TESTING_JSONT" (Fpath.to_string exe) env)
+    Ok (Os.Env.add "B0_TESTING_JSONT" (Filepath.to_string exe) env)
   in
   let meta =
     B0_meta.empty
@@ -137,20 +137,20 @@ let soup_code =
 
 let soup =
   let doc = "Soup paper" in
-  let base = Fpath.v "soup.tex" in
+  let base = Filepath.v "soup.tex" in
   let build b =
     let m = B0_build.memo b in
     let pdflatex =
       let vars = ["TEXINPUTS"]  in
-      B0_memo.tool m (B0_memo.Tool.make ~vars (Fpath.v "pdflatex"))
+      B0_memo.tool m (B0_memo.Tool.make ~vars (Filepath.v "pdflatex"))
     in
     let docdir = B0_build.in_scope_dir b ~/"paper" in
-    let pdf = B0_build.in_current_dir b (Fpath.(base -+ ".pdf")) in
-    let reads = [Fpath.(docdir / "jfp.cls"); Fpath.(docdir // base) ] in
-    let writes = [pdf; Fpath.(pdf -+ ".aux"); Fpath.(pdf -+ ".log")] in
+    let pdf = B0_build.in_current_dir b (Filepath.(base -+ ".pdf")) in
+    let reads = [Filepath.(docdir / "jfp.cls"); Filepath.(docdir // base) ] in
+    let writes = [pdf; Filepath.(pdf -+ ".aux"); Filepath.(pdf -+ ".log")] in
     let cwd = B0_build.current_dir b in
     let env =
-      Os.Env.(empty |> add "TEXINPUTS" (Fpath.to_string docdir ^ "//:"))
+      Os.Env.(empty |> add "TEXINPUTS" (Filepath.to_string docdir ^ "//:"))
     in
     let run_tex =
       pdflatex Cmd.(arg "-file-line-error" % "-halt-on-error" %
@@ -163,7 +163,7 @@ let soup =
     Fut.return ()
   in
   let show_pdf e u ~args:_ = (* TODO b0: B0_show_pdf action ? *)
-    let pdf = Fpath.(B0_env.unit_dir e u // base -+ ".pdf") in
+    let pdf = Filepath.(B0_env.unit_dir e u // base -+ ".pdf") in
     let* view = B0_pdf_viewer.find ~search:(B0_env.get_cmd e) () in
     let* () = B0_pdf_viewer.show view pdf in
     Ok Os.Exit.ok

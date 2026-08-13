@@ -9,10 +9,10 @@ open B0_testing
 
 let args = Test.Arg.make ()
 
-let src_in ~cwd src = Fpath.drop_strict_prefix ~prefix:cwd src |> Option.get
+let src_in ~cwd src = Filepath.drop_strict_prefix ~prefix:cwd src |> Option.get
 let snap_stdout ~cwd cmd ~ext src =
   let cmd = Cmd.(cmd %% path (src_in ~cwd src)) in
-  Snap.stdout ~cwd ~trim:false cmd !@ Fpath.(src -+ ext) ~__POS__
+  Snap.stdout ~cwd ~trim:false cmd !@ Filepath.(src -+ ext) ~__POS__
 
 let test_textlocs =
   Test.test' args "locs" @@ fun (finit, cwd, (_i, valid_srcs)) ->
@@ -48,7 +48,7 @@ let test_invalid =
   Test.test' args "fmt invalid JSON" @@ fun (finit, cwd, (invalid_srcs, _v)) ->
   let snap src =
     let cmd = Cmd.(finit % "fmt" %% path (src_in ~cwd src)) in
-    Snap.run ~cwd cmd !@ Fpath.(src -+ ".run") ~__POS__
+    Snap.run ~cwd cmd !@ Filepath.(src -+ ".run") ~__POS__
   in
   List.iter snap invalid_srcs
 
@@ -65,15 +65,17 @@ let get_srcs dir =
     let dotfiles = false and follow_symlinks = true and recurse = true in
     Os.Dir.contents ~kind:`Files ~dotfiles ~follow_symlinks ~recurse dir
   in
-  let is_json f = Fpath.take_ext ~multi:true f = ".json" in
-  let is_invalid f = String.starts_with ~prefix:"invalid" (Fpath.basename f) in
+  let is_json f = Filepath.take_ext ~multi:true f = ".json" in
+  let is_invalid f =
+    String.starts_with ~prefix:"invalid" (Filepath.basename f)
+  in
   Ok (List.partition is_invalid (List.filter is_json files))
 
 let main () =
   Test.main @@ fun () ->
   Test.error_to_failstop @@
   let* cmd = get_jsont_cmd () in
-  let snapshot_dir = Fpath.(Test.dir () / "snapshots") in
+  let snapshot_dir = Filepath.(Test.dir () / "snapshots") in
   let* srcs = get_srcs snapshot_dir in
   let args = Test.Arg.[value args (cmd, snapshot_dir, srcs)] in
   Ok (Test.autorun ~args ())
