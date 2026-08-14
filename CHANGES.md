@@ -1,3 +1,5 @@
+v0.3.0 2026-08-14 Zagreb
+------------------------
 
 - Add `Jsont.Json.remove_mem[']`
 - Fix nested out-of-order case member decodes (#14)
@@ -5,21 +7,23 @@
   number is changed from `[-2^53;2^53]` to `[-2^53+1;2^53-1]` which is the
   correct range for reliable integer interchange.
 
-  While `2^53` is the maximal integer that can be represented
-  exactly, it is ambiguous as it shares its representation with
-  `2^53+1`. Data encoded with `jsont` would not encode `2^53+1` as a
-  number but as a string. However if you deal with non `jsont`
-  generated data the JSON number `2^53+1` was read as `2^53` instead
-  of erroring (because we convert from the float representation).  The
-  new behaviour entails that both `-2^53` and `2^53` values that you
-  may have encoded with `Jsont.{int,int64}` will not parse back as
-  they are now expected to be encoded by a string instead of a number.
+  While `2^53` is the maximal integer that can be represented exactly,
+  it is ambiguous as it shares its representation with `2^53+1`. This
+  means you could decode a JSON number `2^53+1` as `2^53`. `jsont` did
+  however encode `2^53+1` as a string so it was lossless on your own
+  data.
 
-  You can use `Jsont.legacy_{int,int64}` to migrate your data, the
-  decoding works as before (and thus remains wrong if they hit JSON numbers
-  `-2^52-1` and `2^53+1` by silently inputing them as `-2^52` and
-  `2^53` instead of erroring) but the encoding uses the new
-  range. Thanks to Thomas Gazagnaire for the report (#18).
+  The new behaviour entails that both `-2^53` and `2^53` values are
+  now encoded as a string rather than a number. If you have encoded
+  these numbers with the the previous version of `Jsont.{int,int64}`
+  they will not parse back: they are now expected to be encoded by a
+  string.  You can use `Jsont.legacy_{int,int64}` to migrate your
+  data, the decoding works as before (and thus remains wrong if they
+  hit externally produced JSON numbers `-2^53-1` and `2^53+1`) but the
+  encoding uses the new range.
+  
+  Thanks to Thomas Gazagnaire for the report (#18).
+
 
 v0.2.0 2025-07-25 Zagreb
 ------------------------
