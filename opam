@@ -17,12 +17,14 @@ third-party processors or codecs.
 
 Jsont is distributed under the ISC license. It has no dependencies.
 The codec is optional and depends on the [`bytesrw`] library. The JavaScript
-support is optional and depends on the [`brr`] library.
+support is optional and depends on the [`brr`] library. The type gist
+support is optional and depends on the [`typegist`] library.
 
 Homepage: <https://erratique.ch/software/jsont/>
 
 [`bytesrw`]: https://erratique.ch/software/bytesrw
-[`brr`]: https://erratique.ch/software/brr"""
+[`brr`]: https://erratique.ch/software/brr
+[`typegist`]: https://erratique.ch/software/typegist"""
 maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
 authors: "The jsont programmers"
 license: "ISC"
@@ -37,7 +39,7 @@ depends: [
   "topkg" {build & >= "1.1.0"}
   "b0" {dev & with-test}
 ]
-depopts: ["cmdliner" "brr" "bytesrw"]
+depopts: ["cmdliner" "brr" "bytesrw" "typegist"]
 conflicts: [
   "cmdliner" {< "1.3.0"}
   "brr" {< "0.0.6"}
@@ -54,6 +56,8 @@ build: [
   "%{bytesrw:installed}%"
   "--with-brr"
   "%{brr:installed}%"
+  "--with-typegist"
+  "%{typegist:installed}%"
 ]
 dev-repo: "git+https://erratique.ch/repos/jsont.git"
 x-maintenance-intent: ["(latest)"]

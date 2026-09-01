@@ -7,10 +7,12 @@ let b0_std = B0_ocaml.libname "b0.std"
 let bytesrw = B0_ocaml.libname "bytesrw"
 let cmdliner = B0_ocaml.libname "cmdliner"
 let brr = B0_ocaml.libname "brr"
+let typegist = B0_ocaml.libname "typegist"
 
 let jsont = B0_ocaml.libname "jsont"
 let jsont_bytesrw = B0_ocaml.libname "jsont.bytesrw"
 let jsont_brr = B0_ocaml.libname "jsont.brr"
+let jsont_typegist = B0_ocaml.libname "jsont.typegist"
 
 (* Libraries *)
 
@@ -27,6 +29,11 @@ let jsont_brr_lib =
   let srcs = [ `Dir ~/"src/brr" ] in
   let requires = [brr; jsont] in
   B0_ocaml.lib jsont_brr ~srcs ~requires ~exports:requires
+
+let jsont_typegist_lib =
+  let srcs = [ `Dir ~/"src/typegist" ] in
+  let requires = [jsont; typegist] in
+  B0_ocaml.lib jsont_typegist ~srcs ~requires ~exports:requires
 
 (* Tools *)
 
@@ -89,6 +96,11 @@ let test_brr =
   let requires = [b0_std; brr; jsont; jsont_brr] in
   let meta = B0_meta.(empty |> tag test) in
   B0_jsoo.html_page "test_jsont_brr" ~doc ~meta ~srcs ~requires
+
+let test_jsont_typegist =
+  let doc = "Test Jsont_typegist derivation" in
+  let requires = [b0_std; jsont; jsont_bytesrw; jsont_typegist] in
+  test ~/"test/test_jsont_typegist.ml" ~run:true ~requires ~doc
 
 let test_jsont_tool =
   (* b0: TODO streamline this *)
@@ -196,11 +208,13 @@ let default =
      {|[["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
                   "--with-cmdliner" "%{cmdliner:installed}%"
                   "--with-bytesrw" "%{bytesrw:installed}%"
-                  "--with-brr" "%{brr:installed}%"]]|}
+                  "--with-brr" "%{brr:installed}%"
+                  "--with-typegist" "%{typegist:installed}%"]]|}
    |> ~~ B0_opam.depopts
      ["cmdliner", "";
       "brr", "";
-      "bytesrw", ""]
+      "bytesrw", "";
+      "typegist", ""]
    |> ~~ B0_opam.conflicts [ "cmdliner", {|< "1.3.0"|};
                              "brr", {|< "0.0.6"|}; ]
    |> ~~ B0_opam.depends

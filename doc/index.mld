@@ -42,6 +42,14 @@ This library depends on the {!brr} library and exports the [jsont] library.
 {!modules:
 Jsont_brr}
 
+{1:jsont_typegist Library [jsont.typegist]}
+
+This library depends on the {!typegist} library and exports the
+[jsont] library.
+
+{!modules:
+Jsont_typegist}
+
 {1:quick_start Quick start}
 
 Given JSON for task items encoded in JSON as follows:

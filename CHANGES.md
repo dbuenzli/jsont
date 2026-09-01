@@ -1,3 +1,7 @@
+
+
+- Add `jsont.typegist` library.
+
 v0.3.0 2026-08-14 Zagreb
 ------------------------
 

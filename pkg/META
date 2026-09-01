@@ -32,3 +32,16 @@ package "bytesrw" (
   plugin(native) = "jsont_bytesrw.cmxs"
   exists_if = "jsont_bytesrw.cma jsont_bytesrw.cmxa"
 )
+
+package "typegist" (
+  directory = "typegist"
+  description = "The jsont.typegist library"
+  version = "%%VERSION_NUM%%"
+  requires = "jsont typegist"
+  exports = "jsont typegist"
+  archive(byte) = "jsont_typegist.cma"
+  archive(native) = "jsont_typegist.cmxa"
+  plugin(byte) = "jsont_typegist.cma"
+  plugin(native) = "jsont_typegist.cmxs"
+  exists_if = "jsont_typegist.cma jsont_typegist.cmxa"
+)

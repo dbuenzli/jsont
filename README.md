@@ -16,12 +16,14 @@ third-party processors or codecs.
 
 Jsont is distributed under the ISC license. It has no dependencies.
 The codec is optional and depends on the [`bytesrw`] library. The JavaScript
-support is optional and depends on the [`brr`] library.
+support is optional and depends on the [`brr`] library. The type gist
+support is optional and depends on the [`typegist`] library.
 
 Homepage: <https://erratique.ch/software/jsont/>
 
 [`bytesrw`]: https://erratique.ch/software/bytesrw
 [`brr`]: https://erratique.ch/software/brr
+[`typegist`]: https://erratique.ch/software/typegist
 
 ## Installation
 
@@ -30,6 +32,7 @@ Jsont can be installed with `opam`:
     opam install jsont 
     opam install jsont bytesrw   # For the optional codec support
     opam install jsont brr       # For the optional JavaScript support
+    opam install jsont typegist  # For the optional type gist support
     opam install jsont bytesrw cmdliner  # For the jsont tool
 
 ## Documentation
