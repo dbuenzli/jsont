@@ -107,11 +107,13 @@ module Cases = struct
       let book_count a = a.book_count
       let pseudo a = a.pseudo
       let jsont =
-        Jsont.Object.map ~kind:"Author" make
-        |> Jsont.Object.mem "name" Jsont.string ~enc:name
-        |> Jsont.Object.mem "book_count" Jsont.int ~enc:book_count
-        |> Jsont.Object.mem "pseudo" Jsont.string ~enc:pseudo
-        |> Jsont.Object.finish
+        let open Jsont.Object.Syntax in
+        define ~kind:"Author" @@
+        let+ name = mem "name" Jsont.string ~enc:name
+        and+ book_count = mem "book_count" Jsont.int ~enc:book_count
+        and+ pseudo = mem "pseudo" Jsont.string ~enc:pseudo
+        in
+        { name; book_count; pseudo }
     end
 
     module Editor = struct
