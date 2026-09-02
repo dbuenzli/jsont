@@ -105,7 +105,7 @@ let err_malformed_utf_8 d =
   if d.i_next > d.i_max
   then err_here d "UTF-8 decoding error: unexpected end of bytes"
   else err_here d "UTF-8 decoding error: invalid byte %a"
-      pp_code (Printf.sprintf "%x02x" (Bytes.get_uint8 d.i d.i_next))
+      pp_code (Printf.sprintf "x%02x" (Bytes.get_uint8 d.i d.i_next))
 
 let err_exp d = err_here d "Expected %a but found %a"
 let err_exp_while d = err_here d "Expected %a while parsing %a but found %a"
