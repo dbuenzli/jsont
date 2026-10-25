@@ -1222,6 +1222,15 @@ module Object = struct
         String_map.fold (fun n v acc -> f Meta.none n v acc) mems acc
       in
       map ?kind ?doc type' ~dec_empty ~dec_add ~dec_finish ~enc:{enc}
+
+    let string_assoc ?kind ?doc type' =
+      let dec_empty () = [] in
+      let dec_add _meta n v mems = (n, v) :: mems in
+      let dec_finish _meta mems = List.rev mems in
+      let enc f mems acc =
+        List.fold_left (fun acc (n, v) -> f Meta.none n v acc) acc mems
+      in
+      map ?kind ?doc type' ~dec_empty ~dec_add ~dec_finish ~enc:{enc}
   end
 
   let set_shape_unknown_mems shape u = match shape with
@@ -1251,6 +1260,11 @@ module Object = struct
   let as_string_map ?kind ?doc t =
     map ?kind ?doc Fun.id
     |> keep_unknown (Mems.string_map t) ~enc:Fun.id
+    |> finish
+
+  let as_string_assoc ?kind ?doc t =
+    map ?kind ?doc Fun.id
+    |> keep_unknown (Mems.string_assoc t) ~enc:Fun.id
     |> finish
 end
 

@@ -1173,6 +1173,12 @@ module Object : sig
       ('a Stdlib.Map.Make(String).t, 'a, 'a Stdlib.Map.Make(String).t) map
       (** [string_map t] collects unknown member by name and types their
           values with [t]. See {!keep_unknown} and {!as_string_map}. *)
+
+    val string_assoc :
+      ?kind:string -> ?doc:string -> 'a jsont ->
+      ((string * 'a) list, 'a, (string * 'a) list) map
+      (** [string_assoc t] collects unknown member by name and types their
+          values with [t]. See {!keep_unknown} and {!as_string_assoc}. *)
   end
 
   val skip_unknown : ('o, 'dec) map -> ('o, 'dec) map
@@ -1199,6 +1205,11 @@ module Object : sig
     ?kind:string -> ?doc:string -> 'a t -> 'a Stdlib.Map.Make(String).t t
   (** [as_string_map t] maps object to key-value maps of type [t].
       See also {!Mems.string_map} and {!Jsont.json_mems}. *)
+
+  val as_string_assoc :
+    ?kind:string -> ?doc:string -> 'a t -> (string * 'a) list t
+  (** [as_string_map t] maps object to string assoc lists of type [t].
+      See also {!Mems.string_assoc}. *)
 
   val zero : unit t
   (** [zero] ignores JSON objects on decoding and encodes an empty object. *)

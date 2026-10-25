@@ -1,3 +1,8 @@
+
+
+- Add `Jsont.Object.{Mems.string_assoc,as_string_assoc}`.
+
+
 v0.4.0 2026-09-02 Zagreb
 ------------------------
 
