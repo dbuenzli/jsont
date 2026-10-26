@@ -58,7 +58,7 @@ See also {!non_finite_numbers} and the tangentially related topic of
 {1:dealing_with_numbers Dealing with numbers}
 
 JSON is utterly broken to interchange numbers reliably as the standard
-provides no constraints on their representation. Generally interopable
+provides no constraints on their representation. Generally interoperable
 implementations, in particular the most widely deployed and formally
 specified ECMAScript implementation, use IEEE 754 [binary64] values to
 represent finite JSON numbers and [null] values to represent
